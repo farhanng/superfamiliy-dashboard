@@ -1,0 +1,10 @@
+# Sensitive credentials
+calendar_token.json
+credentials.json
+exchange_code.py
+*.log
+.env
+.env.local
+# GCP Service Account
+deploy/svc-account.json
+deploy/*.sh

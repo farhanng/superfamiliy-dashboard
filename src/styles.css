@@ -1,0 +1,292 @@
+/* Import Google Font */
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Base Styles */
+* {
+  box-sizing: border-box;
+}
+
+body {
+  font-family: 'Inter', system-ui, sans-serif;
+  background-color: #F8FAFC;
+  color: #1E293B;
+  margin: 0;
+  padding: 0;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Currency formatting */
+.font-tabular {
+  font-variant-numeric: tabular-nums;
+}
+
+/* Card styles */
+.card {
+  @apply bg-white rounded-xl shadow-sm border border-gray-100 p-4 mb-3;
+}
+
+.card-header {
+  @apply flex items-center justify-between mb-3;
+}
+
+.card-title {
+  @apply text-sm font-medium text-gray-500;
+}
+
+.card-value {
+  @apply text-xl font-bold text-gray-800 font-tabular;
+}
+
+/* Button styles */
+.btn {
+  @apply px-4 py-2 rounded-lg font-medium transition-colors text-sm cursor-pointer border-none inline-flex items-center justify-center gap-2;
+}
+
+.btn-primary {
+  @apply bg-primary text-white hover:bg-primary-dark;
+}
+
+.btn-secondary {
+  @apply bg-gray-100 text-gray-700 hover:bg-gray-200;
+}
+
+.btn-danger {
+  @apply bg-danger text-white hover:bg-red-600;
+}
+
+.btn-success {
+  @apply bg-success text-white hover:bg-emerald-600;
+}
+
+.btn-outline {
+  @apply border border-gray-300 text-gray-700 hover:bg-gray-50;
+}
+
+.btn-sm {
+  @apply px-3 py-1.5 text-xs;
+}
+
+.btn-lg {
+  @apply px-6 py-3 text-base;
+}
+
+.btn-block {
+  @apply w-full;
+}
+
+/* Input styles */
+.input {
+  @apply w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary transition-colors;
+}
+
+.input-label {
+  @apply block text-xs font-medium text-gray-500 mb-1;
+}
+
+.input-group {
+  @apply mb-3;
+}
+
+/* Select */
+.select {
+  @apply w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary bg-white;
+}
+
+/* Progress bar */
+.progress-bar {
+  @apply h-2 bg-gray-100 rounded-full overflow-hidden;
+}
+
+.progress-fill {
+  @apply h-full rounded-full transition-all duration-300;
+}
+
+.progress-fill-success {
+  @apply bg-success;
+}
+
+.progress-fill-warning {
+  @apply bg-warning;
+}
+
+.progress-fill-danger {
+  @apply bg-danger;
+}
+
+/* Badge */
+.badge {
+  @apply inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium;
+}
+
+.badge-primary {
+  @apply bg-primary/10 text-primary;
+}
+
+.badge-success {
+  @apply bg-success/10 text-success;
+}
+
+.badge-warning {
+  @apply bg-warning/10 text-warning;
+}
+
+.badge-danger {
+  @apply bg-danger/10 text-danger;
+}
+
+.badge-gray {
+  @apply bg-gray-100 text-gray-600;
+}
+
+/* List items */
+.list-item {
+  @apply flex items-center justify-between py-3 border-b border-gray-50 last:border-0;
+}
+
+.list-item-content {
+  @apply flex-1;
+}
+
+.list-item-title {
+  @apply text-sm font-medium text-gray-800;
+}
+
+.list-item-subtitle {
+  @apply text-xs text-gray-500 mt-0.5;
+}
+
+.list-item-action {
+  @apply ml-3;
+}
+
+/* Empty state */
+.empty-state {
+  @apply text-center py-8 px-4;
+}
+
+.empty-state-icon {
+  @apply text-4xl text-gray-300 mb-3;
+}
+
+.empty-state-text {
+  @apply text-sm text-gray-400;
+}
+
+/* Mini calendar */
+.mini-calendar {
+  @apply w-full;
+}
+
+.mini-calendar-header {
+  @apply flex items-center justify-between mb-2;
+}
+
+.mini-calendar-title {
+  @apply text-sm font-semibold text-gray-700;
+}
+
+.mini-calendar-grid {
+  @apply grid grid-cols-7 gap-1 text-center;
+}
+
+.mini-calendar-day-header {
+  @apply text-xs font-medium text-gray-400 py-1;
+}
+
+.mini-calendar-day {
+  @apply text-xs py-1 rounded;
+}
+
+.mini-calendar-day-today {
+  @apply bg-primary text-white font-medium;
+}
+
+.mini-calendar-day-has-event {
+  @apply bg-primary/10 text-primary font-medium;
+}
+
+.mini-calendar-day-other {
+  @apply text-gray-300;
+}
+
+/* Modal */
+.modal-header {
+  @apply flex items-center justify-between p-4 border-b border-gray-100;
+}
+
+.modal-title {
+  @apply text-base font-semibold text-gray-800;
+}
+
+.modal-body {
+  @apply p-4;
+}
+
+.modal-footer {
+  @apply flex gap-2 p-4 border-t border-gray-100;
+}
+
+/* Tab styles */
+.tabs {
+  @apply flex border-b border-gray-100 mb-4;
+}
+
+.tab {
+  @apply flex-1 py-2 text-sm font-medium text-center text-gray-500 border-b-2 border-transparent transition-colors cursor-pointer;
+}
+
+.tab-active {
+  @apply text-primary border-primary;
+}
+
+/* Touch target size */
+.touch-target {
+  min-width: 44px;
+  min-height: 44px;
+}
+
+/* Category colors */
+.category-makan { color: #f97316; }
+.category-transportasi { color: #3b82f6; }
+.category-belanja { color: #22c55e; }
+.category-zaidan { color: #a855f7; }
+.category-utilitas { color: #06b6d4; }
+.category lainnya { color: #6b7280; }
+
+/* Event type colors */
+.event-birthday { background-color: #fce7f3; color: #be185d; }
+.event-anniversary { background-color: #fef2f2; color: #b91c1c; }
+.event-school { background-color: #dbeafe; color: #1d4ed8; }
+.event-holiday { background-color: #fef9c3; color: #a16207; }
+.event-other { background-color: #f3f4f6; color: #4b5563; }
+
+/* Weekend category colors */
+.weekend-outdoor { background-color: #dcfce7; color: #15803d; }
+.weekend-indoor { background-color: #dbeafe; color: #1d4ed8; }
+.weekend-education { background-color: #f3e8ff; color: #7c3aed; }
+.weekend-family { background-color: #ffedd5; color: #c2410c; }
+
+/* Bill status */
+.bill-paid { background-color: rgba(16, 185, 129, 0.1); color: #10B981; }
+.bill-unpaid { background-color: rgba(245, 158, 11, 0.1); color: #F59E0B; }
+.bill-overdue { background-color: rgba(239, 68, 68, 0.1); color: #EF4444; }
+
+/* Utility */
+.truncate-2 {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+/* Bottom nav safe area */
+@supports (padding-bottom: env(safe-area-inset-bottom)) {
+  .fixed.bottom-0 {
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+}

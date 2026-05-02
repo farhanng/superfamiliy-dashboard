@@ -1,0 +1,82 @@
+version: '3.8'
+
+services:
+  # ===========================================
+  # Nginx Reverse Proxy (handles both frontend and backend)
+  # ===========================================
+  nginx:
+    image: nginx:alpine
+    container_name: superfamily-nginx
+    restart: unless-stopped
+    ports:
+      - "80:80"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+    depends_on:
+      - frontend
+      - backend
+    networks:
+      - superfamily-network
+
+  # ===========================================
+  # SuperFamily Backend (Go + Gin + SQLite)
+  # ===========================================
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: superfamily-backend
+    restart: unless-stopped
+    ports:
+      - "3001:3001"
+    volumes:
+      - ./data:/app/data:rw
+    environment:
+      - APP_ENV=development
+      - PORT=3001
+      - DB_PATH=/app/data/superfamily.db
+      - CORS_ORIGINS=http://localhost,http://127.0.0.1,http://192.168.0.29,http://app.farhan.biz.id
+      - GIN_MODE=release
+      # Google OAuth Configuration
+      - GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID}
+      - GOOGLE_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET}
+      - GOOGLE_OAUTH_REDIRECT_URI=${GOOGLE_OAUTH_REDIRECT_URI:-http://app.farhan.biz.id/auth/google/callback}
+      - FRONTEND_URL=http://app.farhan.biz.id
+      - OAUTH_ENABLED=true
+      # JWT_SECRET - MUST be set to a strong value (min 32 chars)
+      # In production, use a proper secret management solution
+      - JWT_SECRET=${JWT_SECRET:-superfamily-dev-secret-key-for-local-dev-only-min32chars}
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:3001/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
+    networks:
+      - superfamily-network
+
+  # ===========================================
+  # SuperFamily Frontend (Vite + Tailwind PWA)
+  # ===========================================
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: superfamily-frontend
+    restart: unless-stopped
+    ports:
+      - "5000:5000"
+    depends_on:
+      - backend
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:5000"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    networks:
+      - superfamily-network
+
+networks:
+  superfamily-network:
+    driver: bridge
