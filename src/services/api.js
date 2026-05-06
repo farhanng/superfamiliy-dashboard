@@ -332,4 +332,4 @@ export function getCurrentUser() {
   return getUser()
 }
 
-export { getToken, getUser }
+export { getToken, getUser, setToken, setUser, clearToken, clearUser }
