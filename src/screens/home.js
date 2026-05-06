@@ -168,8 +168,7 @@ export async function renderHome(container) {
           <span class="card-title">${t('mealplan_title')}</span>
           <span class="badge badge-primary">${format(now, 'd MMM')}</span>
         </div>
-        ${mealPlan?.meals ? `
-          ${(() => {
+        ${mealPlan?.meals ? (() => {
             let meals = mealPlan.meals
             if (typeof meals === 'string') {
               try {
@@ -197,11 +196,8 @@ export async function renderHome(container) {
             </div>
             `
           })() : `
-          <p class="text-sm text-gray-400 text-center py-2">${t('mealplan_no_menu')}</p>
+            <p class="text-sm text-gray-400 text-center py-2">${t('mealplan_no_menu')}</p>
           `}
-        ` : `
-          <p class="text-sm text-gray-400 text-center py-2">${t('mealplan_no_menu')}</p>
-        `}
       </div>
 
       <!-- Unpaid Bills Summary -->
