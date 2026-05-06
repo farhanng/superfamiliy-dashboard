@@ -19,6 +19,10 @@ type Config struct {
 	GoogleOAuthRedirectURI string
 	FrontendURL            string
 	OAuthEnabled           bool
+	// Firebase
+	FirebaseProjectID      string
+	FirebaseCredentials    string
+	FirebaseCredentialsPath string
 }
 
 var (
@@ -41,6 +45,9 @@ func Load() *Config {
 			GoogleOAuthRedirectURI:  getEnv("GOOGLE_OAUTH_REDIRECT_URI", ""),
 			FrontendURL:            getEnv("FRONTEND_URL", "http://localhost"),
 			OAuthEnabled:            getEnv("OAUTH_ENABLED", "false") == "true",
+			FirebaseProjectID:        getEnv("FIREBASE_PROJECT_ID", ""),
+			FirebaseCredentials:      getEnv("FIREBASE_CREDENTIALS", ""),
+			FirebaseCredentialsPath:  getEnv("FIREBASE_CREDENTIALS_PATH", "/app/firebase-service-account.json"),
 		}
 
 		// Validate JWT secret - MUST be set in production

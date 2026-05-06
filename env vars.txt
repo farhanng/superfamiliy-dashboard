@@ -1,0 +1,9 @@
+JWT_SECRET=superfamily-prod-secret-change-this-32chars!
+CORS_ORIGINS=https://family.farhan.biz.id
+ENVIRONMENT=production
+GOOGLE_CLIENT_ID=916992190881-66s7ml38rsp2ibl8ah6ohcnsrj2m039d.apps.googleusercontent.com
+GOOGLE_CLIENT_SECRET=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
+GOOGLE_OAUTH_REDIRECT_URI=https://superfamily-backend-916992190881.asia-southeast1.run.app/api/auth/google/callback
+FRONTEND_URL=https://family.farhan.biz.id
+FIREBASE_PROJECT_ID=copchan-superfamily-app
+FIREBASE_CREDENTIALS_PATH=/app/firebase-service-account.json

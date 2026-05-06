@@ -284,5 +284,21 @@ Never skip levels. PM Agent exists to handle cross-team issues.
 ---
 
 *This file is the single source of truth for agent workflows.*  
+## 🔴 Active Issue: SSO Fix (2026-05-02)
+
+**Problem:** OAuth 500 error on callback - Firebase whitelist check failing
+
+**Root Cause:** Firebase not connecting - credentials file path issue
+
+**Current Status:** SSE deployed backend with Firebase code, but Firebase Init failing
+
+**Next Steps:**
+1. SQA: Debug Firebase connection issue
+2. Fix Firebase Init code or env vars
+3. Re-test OAuth flow
+4. Full regression before client test
+
+---
+
 *Last Updated: 2026-05-02*
 *Version: 1.0*

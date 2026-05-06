@@ -1,72 +1,17 @@
-// screens/login.js - Login screen (SSO-only)
+// screens/login.js - Login screen (Firebase Auth)
 import { t, getLang } from '../i18n.js'
-import { logout, checkAuth } from '../api/auth.js'
-import { getOAuthURL } from '../api/client.js'
+import { signInWithGoogle, onAuthStateChange, getCurrentUser, logout } from '../firebase.js'
 import { showToast } from '../main.js'
-import { initSync } from '../api/sync.js'
-
-const AUTH_KEY = 'sf_auth_token'
-
-export function handleOAuthCallback() {
-  const hash = window.location.hash
-  // Handle both /#auth/callback and /auth/callback formats
-  if (!hash.includes('auth/callback')) return false
-  
-  // Parse token from query params
-  const params = new URLSearchParams(hash.split('?')[1] || '')
-  const token = params.get('token')
-  const userId = params.get('user_id')
-  const email = params.get('email')
-  const name = params.get('name')
-  const errorReason = params.get('reason')
-  const errorDetail = params.get('detail')
-  
-  // Handle error case
-  if (errorReason) {
-    showOAuthError(errorReason, errorDetail)
-    return true
-  }
-  
-  if (token) {
-    localStorage.setItem(AUTH_KEY, token)
-    if (userId && email) {
-      localStorage.setItem('sf_user', JSON.stringify({ id: userId, email, name }))
-    }
-    window.location.hash = 'home'
-    window.location.reload()
-    return true
-  }
-  return false
-}
-
-function showOAuthError(reason, detail) {
-  const errorMessages = {
-    access_denied: 'You denied access to Google. Please try again.',
-    invalid_state: 'Security check failed. Please try again.',
-    email_not_whitelisted: 'Your email is not authorized to use this app.',
-    account_suspended: 'Your account has been suspended.',
-    oauth_error: 'OAuth login failed. Please try again.',
-    oauth_disabled: 'Google login is not configured on the server.'
-  }
-  const message = errorMessages[reason] || detail || 'Login failed. Please try again.'
-  showToast(message, 'error')
-  setTimeout(() => {
-    window.location.hash = 'login'
-  }, 3000)
-}
 
 export function renderLogin(container) {
-  // Handle OAuth callback
-  if (handleOAuthCallback()) return
+  const lang = getLang()
 
-  // Check if already authenticated
-  const token = localStorage.getItem(AUTH_KEY)
-  if (token) {
+  // Check if already authenticated with Firebase
+  const user = getCurrentUser()
+  if (user) {
     window.location.hash = 'home'
     return
   }
-
-  const lang = getLang()
 
   container.innerHTML = `
     <div class="min-h-screen bg-gradient-to-b from-primary/10 to-white flex flex-col items-center justify-center p-6">
@@ -76,7 +21,7 @@ export function renderLogin(container) {
         <p class="text-gray-500">Dashboard keluarga Farhan & Inne</p>
       </div>
 
-      <!-- Google OAuth Only -->
+      <!-- Firebase Auth -->
       <div class="w-full max-w-sm">
         <div class="card text-center">
           <h2 class="text-xl font-semibold text-gray-700 mb-4">
@@ -89,7 +34,7 @@ export function renderLogin(container) {
           </p>
           
           <!-- Google OAuth Button -->
-          <a href="${getOAuthURL()}" 
+          <button id="google-login-btn"
              class="flex items-center justify-center gap-3 w-full px-4 py-3 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 hover:border-gray-400 transition-all text-gray-700 font-medium shadow-sm">
             <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 48 48">
               <path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/>
@@ -98,8 +43,16 @@ export function renderLogin(container) {
               <path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/>
             </svg>
             ${lang === 'id' ? 'Masuk dengan Google' : 'Login with Google'}
-          </a>
+          </button>
+          
+          <!-- Loading state -->
+          <div id="login-loading" class="hidden mt-4">
+            <div class="animate-pulse text-gray-400 text-sm">${lang === 'id' ? 'Memproses...' : 'Processing...'}</div>
+          </div>
         </div>
+
+        <!-- Error message container -->
+        <div id="login-error" class="hidden mt-4 p-3 bg-danger/10 border border-danger/20 rounded-lg text-danger text-sm text-center"></div>
 
         <!-- Privacy note -->
         <p class="mt-6 text-center text-xs text-gray-400">
@@ -110,6 +63,34 @@ export function renderLogin(container) {
       </div>
     </div>
   `
+
+  // Google login button handler
+  const loginBtn = document.getElementById('google-login-btn')
+  const loadingEl = document.getElementById('login-loading')
+  const errorEl = document.getElementById('login-error')
+
+  loginBtn.addEventListener('click', async () => {
+    loginBtn.disabled = true
+    loginBtn.classList.add('opacity-50', 'cursor-not-allowed')
+    loadingEl.classList.remove('hidden')
+    errorEl.classList.add('hidden')
+
+    try {
+      const result = await signInWithGoogle()
+      console.log('Firebase Auth successful:', result.user.email)
+      showToast(lang === 'id' ? 'Login berhasil!' : 'Login successful!')
+      window.location.hash = 'home'
+    } catch (error) {
+      console.error('Firebase Auth error:', error)
+      loginBtn.disabled = false
+      loginBtn.classList.remove('opacity-50', 'cursor-not-allowed')
+      loadingEl.classList.add('hidden')
+      
+      // Show error message
+      errorEl.textContent = error.message || (lang === 'id' ? 'Login gagal. Silakan coba lagi.' : 'Login failed. Please try again.')
+      errorEl.classList.remove('hidden')
+    }
+  })
 }
 
 export default renderLogin

@@ -1,8 +1,9 @@
 // bills.js - Bills & Tax Reminders Screen
 // CRUD bills dan tax reminders dengan due date tracking
+// Migrated to Firestore
 
 import { t, getLang } from '../i18n.js'
-import { addBill, updateBill, deleteBill, markBillPaid, markBillUnpaid, getAllBills, getUnpaidBills, addReminder, updateReminder, deleteReminder, markReminderPaid, markReminderUnpaid, getAllReminders, getUnpaidReminders } from '../db.js'
+import * as firestore from '../services/firestore.js'
 import { formatCurrency, formatDate, showModal, hideModal, showToast } from '../main.js'
 import { format, parseISO, differenceInDays, isPast, isToday } from 'date-fns'
 
@@ -16,10 +17,10 @@ export async function renderBills(container) {
   const now = new Date()
   const today = format(now, 'yyyy-MM-dd')
 
-  // Get all data
+  // Get all data from Firestore
   const [bills, reminders] = await Promise.all([
-    getAllBills(),
-    getAllReminders()
+    firestore.getBills(),
+    firestore.getReminders()
   ])
 
   // Sort by due date
@@ -89,11 +90,13 @@ export async function renderBills(container) {
           <div class="space-y-2">
             ${unpaidBills.map(bill => renderBillItem(bill, today, lang)).join('')}
           </div>
+          <button class="btn btn-primary w-full mt-3" id="add-bill-btn">+ ${t('bills_add')}</button>
         ` : `
           <div class="card">
             <div class="empty-state">
               <div class="empty-state-icon">📄</div>
               <p class="empty-state-text">${t('bills_no_bills')}</p>
+              <button class="btn btn-primary mt-3" id="add-bill-btn">+ ${t('bills_add')}</button>
             </div>
           </div>
         `}
@@ -246,10 +249,11 @@ function renderReminderItem(reminder, today, lang, isPaid = false) {
 
 function attachBillListeners(container, bills, today) {
   // Click to edit
-  container.querySelectorAll('.bill-item:not(.reminder-item)').forEach(item => {
+  container.querySelectorAll('.bill-item').forEach(item => {
+    if (item.classList.contains('reminder-item')) return
     item.addEventListener('click', (e) => {
       if (e.target.closest('.mark-paid-btn') || e.target.closest('.mark-unpaid-btn')) return
-      const id = parseInt(item.dataset.id)
+      const id = item.dataset.id
       const bill = bills.find(b => b.id === id)
       if (bill) showBillModal(bill)
     })
@@ -259,18 +263,18 @@ function attachBillListeners(container, bills, today) {
   container.querySelectorAll('.bill-item .mark-paid-btn').forEach(btn => {
     btn.addEventListener('click', async (e) => {
       e.stopPropagation()
-      const id = parseInt(btn.dataset.id)
+      const id = btn.dataset.id
       const bill = bills.find(b => b.id === id)
-      if (bill) {
-        await markBillPaid(id)
+      try {
+        await firestore.markBillPaid(id)
         // Auto-generate next month's bill for recurring frequencies
-        if (bill.frequency && bill.frequency !== 'one_time') {
+        if (bill && bill.frequency && bill.frequency !== 'one_time') {
           const nextDate = new Date(bill.dueDate)
           if (bill.frequency === 'monthly') nextDate.setMonth(nextDate.getMonth() + 1)
           else if (bill.frequency === 'weekly') nextDate.setDate(nextDate.getDate() + 7)
           else if (bill.frequency === 'yearly') nextDate.setFullYear(nextDate.getFullYear() + 1)
           const nextDueStr = nextDate.toISOString().split('T')[0]
-          await addBill({
+          await firestore.addBill({
             title: bill.title,
             amount: bill.amount,
             dueDate: nextDueStr,
@@ -282,6 +286,9 @@ function attachBillListeners(container, bills, today) {
         }
         showToast(t('common_success'))
         window.location.reload()
+      } catch (error) {
+        console.error('Error marking bill paid:', error)
+        showToast(t('common_error'), 'error')
       }
     })
   })
@@ -290,10 +297,32 @@ function attachBillListeners(container, bills, today) {
   container.querySelectorAll('.bill-item .mark-unpaid-btn').forEach(btn => {
     btn.addEventListener('click', async (e) => {
       e.stopPropagation()
-      const id = parseInt(btn.dataset.id)
-      await markBillUnpaid(id)
-      showToast(t('common_success'))
-      window.location.reload()
+      const id = btn.dataset.id
+      try {
+        await firestore.markBillUnpaid(id)
+        showToast(t('common_success'))
+        window.location.reload()
+      } catch (error) {
+        console.error('Error marking bill unpaid:', error)
+        showToast(t('common_error'), 'error')
+      }
+    })
+  })
+
+  // Add bill button (empty state or below list)
+  container.querySelectorAll('#add-bill-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      showBillModal(null, async (data) => {
+        try {
+          await firestore.addBill(data)
+          hideModal()
+          showToast(t('common_success'))
+          window.location.reload()
+        } catch (error) {
+          console.error('Error adding bill:', error)
+          showToast(t('common_error'), 'error')
+        }
+      })
     })
   })
 }
@@ -303,7 +332,7 @@ function attachReminderListeners(container, reminders, today) {
   container.querySelectorAll('.reminder-item').forEach(item => {
     item.addEventListener('click', (e) => {
       if (e.target.closest('.mark-paid-btn') || e.target.closest('.mark-unpaid-btn')) return
-      const id = parseInt(item.dataset.id)
+      const id = item.dataset.id
       const reminder = reminders.find(r => r.id === id)
       if (reminder) showReminderModal(reminder)
     })
@@ -313,10 +342,15 @@ function attachReminderListeners(container, reminders, today) {
   container.querySelectorAll('.reminder-item .mark-paid-btn').forEach(btn => {
     btn.addEventListener('click', async (e) => {
       e.stopPropagation()
-      const id = parseInt(btn.dataset.id)
-      await markReminderPaid(id)
-      showToast(t('common_success'))
-      window.location.reload()
+      const id = btn.dataset.id
+      try {
+        await firestore.markReminderPaid(id)
+        showToast(t('common_success'))
+        window.location.reload()
+      } catch (error) {
+        console.error('Error marking reminder paid:', error)
+        showToast(t('common_error'), 'error')
+      }
     })
   })
 
@@ -324,10 +358,15 @@ function attachReminderListeners(container, reminders, today) {
   container.querySelectorAll('.reminder-item .mark-unpaid-btn').forEach(btn => {
     btn.addEventListener('click', async (e) => {
       e.stopPropagation()
-      const id = parseInt(btn.dataset.id)
-      await markReminderUnpaid(id)
-      showToast(t('common_success'))
-      window.location.reload()
+      const id = btn.dataset.id
+      try {
+        await firestore.markReminderUnpaid(id)
+        showToast(t('common_success'))
+        window.location.reload()
+      } catch (error) {
+        console.error('Error marking reminder unpaid:', error)
+        showToast(t('common_error'), 'error')
+      }
     })
   })
 }
@@ -399,10 +438,15 @@ function showBillModal(existing = null, onSave, onDelete) {
       frequency: formData.get('frequency') || 'monthly'
     }
     if (existing) {
-      await updateBill(existing.id, data)
-      showToast(t('common_success'))
-      hideModal()
-      window.location.reload()
+      try {
+        await firestore.updateBill(existing.id, data)
+        showToast(t('common_success'))
+        hideModal()
+        window.location.reload()
+      } catch (error) {
+        console.error('Error updating bill:', error)
+        showToast(t('common_error'), 'error')
+      }
     } else if (onSave) {
       onSave(data)
     }
@@ -412,9 +456,14 @@ function showBillModal(existing = null, onSave, onDelete) {
   if (existing) {
     document.getElementById('delete-btn')?.addEventListener('click', async () => {
       if (confirm(t('common_confirm_delete'))) {
-        await deleteBill(existing.id)
-        hideModal()
-        window.location.reload()
+        try {
+          await firestore.deleteBill(existing.id)
+          hideModal()
+          window.location.reload()
+        } catch (error) {
+          console.error('Error deleting bill:', error)
+          showToast(t('common_error'), 'error')
+        }
       }
     })
   } else if (onDelete) {
@@ -488,10 +537,15 @@ function showReminderModal(existing = null, onSave, onDelete) {
       note: formData.get('note') || ''
     }
     if (existing) {
-      await updateReminder(existing.id, data)
-      showToast(t('common_success'))
-      hideModal()
-      window.location.reload()
+      try {
+        await firestore.updateReminder(existing.id, data)
+        showToast(t('common_success'))
+        hideModal()
+        window.location.reload()
+      } catch (error) {
+        console.error('Error updating reminder:', error)
+        showToast(t('common_error'), 'error')
+      }
     } else if (onSave) {
       onSave(data)
     }
@@ -501,9 +555,14 @@ function showReminderModal(existing = null, onSave, onDelete) {
   if (existing) {
     document.getElementById('delete-btn')?.addEventListener('click', async () => {
       if (confirm(t('common_confirm_delete'))) {
-        await deleteReminder(existing.id)
-        hideModal()
-        window.location.reload()
+        try {
+          await firestore.deleteReminder(existing.id)
+          hideModal()
+          window.location.reload()
+        } catch (error) {
+          console.error('Error deleting reminder:', error)
+          showToast(t('common_error'), 'error')
+        }
       }
     })
   } else if (onDelete) {
@@ -533,20 +592,30 @@ window.showAddModal.bills = () => {
   document.getElementById('add-bill-btn').addEventListener('click', () => {
     hideModal()
     showBillModal(null, async (data) => {
-      await addBill(data)
-      hideModal()
-      showToast(t('common_success'))
-      window.location.reload()
+      try {
+        await firestore.addBill(data)
+        hideModal()
+        showToast(t('common_success'))
+        window.location.reload()
+      } catch (error) {
+        console.error('Error adding bill:', error)
+        showToast(t('common_error'), 'error')
+      }
     })
   })
 
   document.getElementById('add-tax-btn').addEventListener('click', () => {
     hideModal()
     showReminderModal(null, async (data) => {
-      await addReminder(data)
-      hideModal()
-      showToast(t('common_success'))
-      window.location.reload()
+      try {
+        await firestore.addReminder(data)
+        hideModal()
+        showToast(t('common_success'))
+        window.location.reload()
+      } catch (error) {
+        console.error('Error adding reminder:', error)
+        showToast(t('common_error'), 'error')
+      }
     })
   })
 }

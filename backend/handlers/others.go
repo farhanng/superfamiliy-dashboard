@@ -3,6 +3,7 @@ package handlers
 import (
 	"net/http"
 
+	"superfamily-backend/middleware"
 	"superfamily-backend/models"
 
 	"github.com/gin-gonic/gin"
@@ -77,9 +78,20 @@ func (h *Handler) CreateOrUpdateMealPlan(c *gin.Context) {
 }
 
 func (h *Handler) DeleteMealPlan(c *gin.Context) {
-	id := c.Param("id")
+	weekStart := c.Param("weekStart")
 
-	if err := h.svc.DeleteMealPlan(id); err != nil {
+	// Check if meal plan exists
+	plan, err := h.svc.GetMealPlanByWeek(weekStart)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	if plan == nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Meal plan not found"})
+		return
+	}
+
+	if err := h.svc.DeleteMealPlan(plan.ID); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
@@ -196,6 +208,24 @@ func (h *Handler) UpdateWeekendActivity(c *gin.Context) {
 func (h *Handler) DeleteWeekendActivity(c *gin.Context) {
 	id := c.Param("id")
 
+	// Check if activity exists
+	activities, err := h.svc.GetAllWeekendActivities()
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	found := false
+	for _, a := range activities {
+		if a.ID == id {
+			found = true
+			break
+		}
+	}
+	if !found {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Weekend activity not found"})
+		return
+	}
+
 	if err := h.svc.DeleteWeekendActivity(id); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -225,6 +255,9 @@ func (h *Handler) GetFamilyMembers(c *gin.Context) {
 		members = []models.FamilyMember{}
 	}
 
+	// Sanitize all family members before returning
+	members = models.SanitizeAllFamilyMembers(members)
+
 	c.JSON(http.StatusOK, gin.H{"family_members": members})
 }
 
@@ -234,6 +267,10 @@ func (h *Handler) CreateFamilyMember(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
+
+	// Sanitize input to prevent XSS
+	req.Name = middleware.SanitizeUserName(req.Name)
+	req.Relationship = middleware.SanitizeUserInput(req.Relationship)
 
 	member := &models.FamilyMember{
 		Name:         req.Name,

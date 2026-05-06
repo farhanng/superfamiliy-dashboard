@@ -1,8 +1,9 @@
 // home.js - Home Dashboard Screen
 // Ringkasan semua fitur: budget, events, bills, weekend
+// Migrated to Firestore
 
 import { t, getLang } from '../i18n.js'
-import { getMonthlyBudget, getTransactionsByMonth, getUpcomingEvents, getBillsDueSoon, getWeekendActivitiesByDate, getAllBills, getMealPlanByWeek } from '../db.js'
+import * as firestore from '../services/firestore.js'
 import { formatCurrency, formatDate } from '../main.js'
 import { format, startOfWeek, addDays, isToday, isThisWeek, parseISO } from 'date-fns'
 import { id as idLocale, enUS } from 'date-fns/locale'
@@ -15,15 +16,16 @@ export async function renderHome(container) {
   const currentMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
   const today = format(now, 'yyyy-MM-dd')
 
-  // Get data
-  const [budget, events, billsDueSoon] = await Promise.all([
-    getMonthlyBudget(currentMonth),
-    getUpcomingEvents(14),
-    getBillsDueSoon(7)
+  // Get data from Firestore
+  const [budget, events, billsDueSoon, allBills] = await Promise.all([
+    firestore.getBudget(currentMonth),
+    firestore.getUpcomingEvents(14),
+    firestore.getBillsDueSoon(7),
+    firestore.getBills()
   ])
 
   // Calculate budget spent this month
-  const transactions = await getTransactionsByMonth(now.getFullYear(), now.getMonth() + 1)
+  const transactions = await firestore.getTransactionsByMonth(now.getFullYear(), now.getMonth() + 1)
   const totalSpent = transactions.reduce((sum, t) => sum + (t.amount || 0), 0)
   const budgetAmount = budget?.amount || 0
   const budgetRemaining = budgetAmount - totalSpent
@@ -43,8 +45,8 @@ export async function renderHome(container) {
   const saturday = format(weekendStart, 'yyyy-MM-dd')
   const sunday = format(addDays(weekendStart, 1), 'yyyy-MM-dd')
   const [satActivities, sunActivities] = await Promise.all([
-    getWeekendActivitiesByDate(saturday),
-    getWeekendActivitiesByDate(sunday)
+    firestore.getWeekendActivityByDate(saturday),
+    firestore.getWeekendActivityByDate(sunday)
   ])
 
   const weekendProgress = calculateWeekendProgress(satActivities, sunActivities)
@@ -52,13 +54,12 @@ export async function renderHome(container) {
   // Get meal plan for THIS week (current week, not next weekend)
   const thisWeekStart = startOfWeek(now, { weekStartsOn: 1 }) // Monday
   const thisWeekSaturday = format(addDays(thisWeekStart, 5), 'yyyy-MM-dd')
-  const mealPlan = await getMealPlanByWeek(thisWeekSaturday)
+  const mealPlan = await firestore.getMealPlanByWeek(thisWeekSaturday)
   const DAYS = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday']
   const mealIcons = { breakfast: '🌅', lunch: '☀️', dinner: '🌙' }
   const todayDayKey = DAYS[now.getDay() === 0 ? 6 : now.getDay() - 1]
 
   // Get all bills for unpaid count
-  const allBills = await getAllBills()
   const unpaidBills = allBills.filter(b => !b.isPaid)
   const overdueBills = unpaidBills.filter(b => b.dueDate < today)
 
@@ -168,22 +169,36 @@ export async function renderHome(container) {
           <span class="badge badge-primary">${format(now, 'd MMM')}</span>
         </div>
         ${mealPlan?.meals ? `
-          <div class="space-y-2">
-            ${DAYS.slice(0, 7).map(dayKey => {
-              const dayMeals = mealPlan.meals[dayKey] || {}
-              const hasMeals = dayMeals.breakfast || dayMeals.lunch || dayMeals.dinner
-              const isToday = dayKey === todayDayKey
-              return `
-                <div class="flex items-center gap-2 text-sm ${isToday ? 'bg-primary/5 p-2 rounded-lg' : ''}">
-                  <span class="text-xs font-medium text-gray-500 w-10">${t('mealplan_days.' + dayKey)?.substring(0, 3)}</span>
-                  <span class="flex-1 truncate ${hasMeals ? 'text-gray-700' : 'text-gray-300'}">
-                    ${dayMeals.lunch || dayMeals.breakfast || dayMeals.dinner || (isToday ? '🍽️ Hari ini belum ada menu' : '...')}
-                  </span>
-                  ${isToday ? '<span class="text-xs text-primary font-medium">Hari ini</span>' : ''}
-                </div>
-              `
-            }).join('')}
-          </div>
+          ${(() => {
+            let meals = mealPlan.meals
+            if (typeof meals === 'string') {
+              try {
+                meals = JSON.parse(meals)
+              } catch (e) {
+                meals = {}
+              }
+            }
+            return `
+            <div class="space-y-2">
+              ${DAYS.slice(0, 7).map(dayKey => {
+                const dayMeals = meals[dayKey] || {}
+                const hasMeals = dayMeals.breakfast || dayMeals.lunch || dayMeals.dinner
+                const isToday = dayKey === todayDayKey
+                return `
+                  <div class="flex items-center gap-2 text-sm ${isToday ? 'bg-primary/5 p-2 rounded-lg' : ''}">
+                    <span class="text-xs font-medium text-gray-500 w-10">${t('mealplan_days.' + dayKey)?.substring(0, 3)}</span>
+                    <span class="flex-1 truncate ${hasMeals ? 'text-gray-700' : 'text-gray-300'}">
+                      ${dayMeals.lunch || dayMeals.breakfast || dayMeals.dinner || (isToday ? '🍽️ Hari ini belum ada menu' : '...')}
+                    </span>
+                    ${isToday ? '<span class="text-xs text-primary font-medium">Hari ini</span>' : ''}
+                  </div>
+                `
+              }).join('')}
+            </div>
+            `
+          })() : `
+          <p class="text-sm text-gray-400 text-center py-2">${t('mealplan_no_menu')}</p>
+          `}
         ` : `
           <p class="text-sm text-gray-400 text-center py-2">${t('mealplan_no_menu')}</p>
         `}

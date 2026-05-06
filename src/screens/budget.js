@@ -1,8 +1,9 @@
 // budget.js - Budget Tracker Screen
 // CRUD transaksi dan budget bulanan dengan Income/Expense tracking
+// Migrated to Firestore
 
 import { t, getLang } from '../i18n.js'
-import { addTransaction, updateTransaction, deleteTransaction, getTransactionsByMonth, getMonthlyBudget, setMonthlyBudget } from '../db.js'
+import * as firestore from '../services/firestore.js'
 import { formatCurrency, formatDate, showModal, hideModal, showToast } from '../main.js'
 import { format, addMonths, subMonths, parseISO } from 'date-fns'
 
@@ -32,10 +33,10 @@ export async function renderBudget(container) {
 
   const monthKey = `${currentYear}-${String(currentMonth).padStart(2, '0')}`
 
-  // Get data
+  // Get data from Firestore
   const [transactions, budget] = await Promise.all([
-    getTransactionsByMonth(currentYear, currentMonth),
-    getMonthlyBudget(monthKey)
+    firestore.getTransactionsByMonth(currentYear, currentMonth),
+    firestore.getBudget(monthKey)
   ])
 
   // Calculate totals
@@ -149,7 +150,7 @@ export async function renderBudget(container) {
   // Add income button
   document.getElementById('add-income-btn').addEventListener('click', () => {
     showTransactionModal(null, 'income', async (data) => {
-      await addTransaction({ ...data, type: 'income', status: data.status || 'not_done' })
+      await firestore.addTransaction({ ...data, type: 'income', status: data.status || 'not_done' })
       showToast(t('common_success'))
       renderBudget(container)
     })
@@ -158,7 +159,7 @@ export async function renderBudget(container) {
   // Add expense button
   document.getElementById('add-expense-btn').addEventListener('click', () => {
     showTransactionModal(null, 'expense', async (data) => {
-      await addTransaction({ ...data, type: 'expense', status: data.status || 'not_done' })
+      await firestore.addTransaction({ ...data, type: 'expense', status: data.status || 'not_done' })
       showToast(t('common_success'))
       renderBudget(container)
     })
@@ -167,15 +168,15 @@ export async function renderBudget(container) {
   // Transaction click to edit
   document.querySelectorAll('.list-item').forEach(item => {
     item.addEventListener('click', () => {
-      const id = parseInt(item.dataset.id)
+      const id = item.dataset.id
       const trx = transactions.find(t => t.id === id)
       if (trx) showTransactionModal(trx, trx.type, async (data) => {
-        await updateTransaction(id, { ...data, type: trx.type })
+        await firestore.updateTransaction(id, { ...data, type: trx.type })
         hideModal()
         showToast(t('common_success'))
         renderBudget(container)
       }, async () => {
-        await deleteTransaction(id)
+        await firestore.deleteTransaction(id)
         hideModal()
         showToast(t('common_success'))
         renderBudget(container)
@@ -201,7 +202,7 @@ function showTransactionModal(existing = null, defaultType = 'expense', onSave, 
     <form id="transaction-form" class="modal-body">
       <div class="input-group">
         <label class="input-label">${t('budget_amount')}</label>
-        <input type="number" name="amount" class="input" placeholder="0" value="${existing?.amount || ''}" required min="1">
+        <input type="text" inputmode="numeric" name="amount" class="input" placeholder="0" value="${existing?.amount || ''}" required min="1">
       </div>
       <div class="input-group">
         <label class="input-label">${t('budget_category')}</label>
@@ -243,8 +244,7 @@ function showTransactionModal(existing = null, defaultType = 'expense', onSave, 
       category: formData.get('category'),
       date: formData.get('date'),
       status: formData.get('status'),
-      note: formData.get('note') || '',
-      updatedAt: new Date()
+      note: formData.get('note') || ''
     }
     onSave(data)
   })

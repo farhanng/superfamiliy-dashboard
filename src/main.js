@@ -4,7 +4,6 @@
 import './styles.css'
 import { setupRouter, navigate, getCurrentRoute } from './router.js'
 import { t, getLang, toggleLang } from './i18n.js'
-import * as db from './db.js'
 import { renderHome } from './screens/home.js'
 import { renderBudget } from './screens/budget.js'
 import { renderEvents } from './screens/events.js'
@@ -12,7 +11,8 @@ import { renderMealPlan } from './screens/mealplan.js'
 import { renderWeekend } from './screens/weekend.js'
 import { renderBills } from './screens/bills.js'
 import { renderLogin } from './screens/login.js'
-import { isAuthenticated } from './api/client.js'
+import { isAuthenticated, logout } from './firebase.js'
+import { showToast } from './main.js'
 
 // Screen renderers
 const screenRenderers = {
@@ -58,7 +58,8 @@ function renderApp(route) {
       <header class="fixed top-0 left-0 right-0 bg-white z-40 border-b border-gray-100">
         <div class="flex items-center justify-between px-4 py-3">
           <h1 class="text-lg font-semibold text-gray-800" id="screen-title">${t('nav_' + route.screen)}</h1>
-          <div class="flex items-center gap-3">
+          <div class="flex items-center gap-2">
+            ${route.screen === 'bills' || route.screen === 'events' ? `<button id="add-screen-btn" class="btn btn-sm btn-primary" title="${t('common_add')}">+</button>` : ''}
             <button id="lang-toggle" class="flex items-center gap-1 text-sm text-primary font-medium">
               <span>${lang === 'id' ? '🇮🇩' : '🇬🇧'}</span>
               <span>${lang.toUpperCase()}</span>
@@ -120,13 +121,25 @@ function renderApp(route) {
     renderApp(getCurrentRoute())
   })
 
+  // Add screen button (Bills/Events)
+  document.getElementById('add-screen-btn')?.addEventListener('click', () => {
+    const route = getCurrentRoute().screen
+    if (window.showAddModal && typeof window.showAddModal[route] === 'function') {
+      window.showAddModal[route]()
+    }
+  })
+
   // Logout button
-  document.getElementById('logout-btn').addEventListener('click', () => {
+  document.getElementById('logout-btn').addEventListener('click', async () => {
     if (confirm(lang === 'id' ? 'Keluar dari aplikasi?' : 'Logout from app?')) {
-      import('./api/auth.js').then(m => {
-        m.logout()
+      try {
+        await logout()
+        showToast(lang === 'id' ? 'Berhasil keluar' : 'Logged out successfully')
         window.location.reload()
-      })
+      } catch (error) {
+        console.error('Logout error:', error)
+        showToast(lang === 'id' ? 'Gagal keluar' : 'Logout failed', 'error')
+      }
     }
   })
 

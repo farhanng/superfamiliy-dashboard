@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"database/sql"
 	"fmt"
 	"log"
@@ -10,6 +11,7 @@ import (
 	"time"
 
 	"superfamily-backend/config"
+	"superfamily-backend/firebase"
 	"superfamily-backend/handlers"
 	"superfamily-backend/middleware"
 	"superfamily-backend/oauth"
@@ -39,6 +41,29 @@ func main() {
 	// Set JWT secret getter for middleware
 	middleware.GetJWTSecret = func() string {
 		return cfg.JWTSecret
+	}
+
+	// Initialize Firebase (Firestore for whitelist and auth)
+	if cfg.FirebaseProjectID != "" {
+		ctx := context.Background()
+		firebaseCfg := firebase.Config{
+			ProjectID: cfg.FirebaseProjectID,
+			CredentialsPath: cfg.FirebaseCredentialsPath,
+		}
+		if cfg.FirebaseCredentials != "" {
+			firebaseCfg.Credentials = cfg.FirebaseCredentials
+		}
+		if err := firebase.Init(ctx, firebaseCfg); err != nil {
+			log.Printf("Warning: Failed to initialize Firebase: %v", err)
+		} else {
+			log.Println("Firebase initialized successfully")
+			// Seed whitelist users
+			if err := firebase.NewWhitelistRepository().SeedWhitelist(ctx); err != nil {
+				log.Printf("Warning: Failed to seed whitelist: %v", err)
+			}
+		}
+	} else {
+		log.Println("WARNING: Firebase not configured. Whitelist will use SQLite.")
 	}
 
 	// Initialize database
@@ -102,16 +127,25 @@ func main() {
 
 	// Health check endpoint (no auth required)
 	app.GET("/health", func(c *gin.Context) {
+		firebaseStatus := "not_configured"
+		if cfg.FirebaseProjectID != "" && (cfg.FirebaseCredentials != "" || cfg.FirebaseCredentialsPath != "") {
+			firebaseStatus = "configured"
+			if firebase.GetClient() != nil {
+				firebaseStatus = "connected"
+			}
+		}
+
 		if err := db.Ping(); err != nil {
 			c.JSON(http.StatusServiceUnavailable, gin.H{"status": "unhealthy", "error": err.Error()})
 			return
 		}
 		c.JSON(http.StatusOK, gin.H{
-			"status":           "healthy",
-			"connected_sse":    middleware.GetSSEClientManager().GetConnectedUsers(),
-			"database":          "connected",
-			"environment":      cfg.Environment,
-			"oauth_enabled":     cfg.GoogleClientID != "",
+			"status":            "healthy",
+			"connected_sse":     middleware.GetSSEClientManager().GetConnectedUsers(),
+			"database":           "connected",
+			"firebase":          firebaseStatus,
+			"environment":       cfg.Environment,
+			"oauth_enabled":      cfg.GoogleClientID != "",
 		})
 	})
 
@@ -129,13 +163,14 @@ func main() {
 	// Auth routes (no auth required)
 	auth := app.Group("/api/auth")
 	{
-		auth.POST("/register", h.Register)
-		auth.POST("/login", h.Login)
+		auth.POST("/register", middleware.RateLimitMiddleware(), h.Register)
+		auth.POST("/login", middleware.StrictRateLimitMiddleware(), h.Login)
 
 		// Google OAuth routes (no auth required)
 		auth.GET("/google", oauthHandler.InitiateGoogleOAuth)
 		auth.GET("/google/callback", oauthHandler.HandleGoogleCallback)
 		auth.GET("/oauth/status", oauthHandler.OAuthStatus)
+		auth.GET("/test-login", oauthHandler.TestLogin)
 	}
 
 	// API routes (all require authentication)
@@ -457,27 +492,40 @@ func seedDefaultUsers(repo *repositories.Repository) error {
 }
 
 func seedWhitelistEntries(repo *repositories.Repository) error {
-	// Seed farhan whitelist if not exists
-	farhanWhitelist, _ := repo.GetWhitelistUserByEmail("farhan@superfamily.local")
+	// Migrate existing whitelist entries from fake local emails to real Gmail addresses
+	migrationPairs := []struct{ oldEmail, newEmail string }{
+		{"farhan@superfamily.local", "farhan.naufalghani@gmail.com"},
+		{"inne@superfamily.local", "ineprinusantari@gmail.com"},
+	}
+	for _, m := range migrationPairs {
+		if err := repo.UpdateWhitelistEmail(m.oldEmail, m.newEmail); err != nil {
+			log.Printf("Warning: failed to migrate whitelist %s -> %s: %v", m.oldEmail, m.newEmail, err)
+		} else {
+			log.Printf("Migrated whitelist %s -> %s", m.oldEmail, m.newEmail)
+		}
+	}
+
+	// Seed real Gmail whitelist entries if not exist
+	farhanWhitelist, _ := repo.GetWhitelistUserByEmail("farhan.naufalghani@gmail.com")
 	if farhanWhitelist == nil {
-		farhan, _ := repo.GetUserByEmail("farhan@superfamily.local")
+		farhan, _ := repo.GetUserByEmail("farhan.naufalghani@gmail.com")
 		if farhan != nil {
-			if _, err := repo.CreateWhitelistUser("farhan@superfamily.local", "Farhan", farhan.ID); err != nil {
+			if _, err := repo.CreateWhitelistUser("farhan.naufalghani@gmail.com", "Farhan", farhan.ID); err != nil {
 				return fmt.Errorf("failed to seed whitelist for farhan: %w", err)
 			}
-			log.Printf("Added farhan@superfamily.local to whitelist")
+			log.Printf("Added farhan.naufalghani@gmail.com to whitelist")
 		}
 	}
 
 	// Seed inne whitelist if not exists
-	inneWhitelist, _ := repo.GetWhitelistUserByEmail("inne@superfamily.local")
+	inneWhitelist, _ := repo.GetWhitelistUserByEmail("ineprinusantari@gmail.com")
 	if inneWhitelist == nil {
-		inne, _ := repo.GetUserByEmail("inne@superfamily.local")
+		inne, _ := repo.GetUserByEmail("ineprinusantari@gmail.com")
 		if inne != nil {
-			if _, err := repo.CreateWhitelistUser("inne@superfamily.local", "Inne", inne.ID); err != nil {
+			if _, err := repo.CreateWhitelistUser("ineprinusantari@gmail.com", "Inne", inne.ID); err != nil {
 				return fmt.Errorf("failed to seed whitelist for inne: %w", err)
 			}
-			log.Printf("Added inne@superfamily.local to whitelist")
+			log.Printf("Added ineprinusantari@gmail.com to whitelist")
 		}
 	}
 

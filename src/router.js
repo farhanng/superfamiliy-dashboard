@@ -17,8 +17,18 @@ const routes = {
 export function getCurrentRoute() {
   const hash = window.location.hash.slice(1) || 'home'
   const parts = hash.split('?')
-  const routeName = parts[0]
+  let routeName = parts[0]
   const queryString = parts.length > 1 ? parts[1] : ''
+  
+  // Handle /auth/callback format (from OAuth redirect)
+  if (routeName === '/auth/callback') {
+    routeName = 'auth_callback'
+  }
+  // Handle /auth/error format
+  if (routeName === '/auth/error') {
+    routeName = 'auth_error'
+  }
+  
   const route = routes[routeName] || routes.home
   return { ...route, queryString }
 }

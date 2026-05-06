@@ -153,6 +153,17 @@ func (h *Handler) UpdateBill(c *gin.Context) {
 func (h *Handler) DeleteBill(c *gin.Context) {
 	id := c.Param("id")
 
+	// Check if bill exists
+	bill, err := h.svc.GetBillByID(id)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	if bill == nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Bill not found"})
+		return
+	}
+
 	if err := h.svc.DeleteBill(id); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return

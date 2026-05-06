@@ -3,6 +3,7 @@ package handlers
 import (
 	"net/http"
 
+	"superfamily-backend/middleware"
 	"superfamily-backend/services"
 
 	"github.com/gin-gonic/gin"
@@ -38,11 +39,18 @@ func (h *Handler) Register(c *gin.Context) {
 		return
 	}
 
+	// Sanitize user input to prevent XSS
+	req.Name = middleware.SanitizeUserName(req.Name)
+	req.Email = middleware.SanitizeEmail(req.Email)
+
 	resp, err := h.svc.Register(req.Email, req.Password, req.Name)
 	if err != nil {
 		c.JSON(http.StatusConflict, gin.H{"error": err.Error()})
 		return
 	}
+
+	// Sanitize user object before sending response
+	resp.User.Sanitize()
 
 	c.JSON(http.StatusCreated, resp)
 }
@@ -60,6 +68,9 @@ func (h *Handler) Login(c *gin.Context) {
 		return
 	}
 
+	// Sanitize user object before sending response
+	resp.User.Sanitize()
+
 	c.JSON(http.StatusOK, resp)
 }
 
@@ -70,6 +81,9 @@ func (h *Handler) GetMe(c *gin.Context) {
 		c.JSON(http.StatusNotFound, gin.H{"error": "User not found"})
 		return
 	}
+
+	// Sanitize user before returning
+	user.Sanitize()
 
 	c.JSON(http.StatusOK, gin.H{"user": user})
 }

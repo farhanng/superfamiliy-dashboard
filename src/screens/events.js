@@ -1,8 +1,9 @@
 // events.js - Calendar Events Screen
 // CRUD events dengan mini calendar dan upcoming list
+// Migrated to Firestore
 
 import { t, getLang } from '../i18n.js'
-import { addEvent, updateEvent, deleteEvent, getAllEvents, getEventsByMonth, getUpcomingEvents } from '../db.js'
+import * as firestore from '../services/firestore.js'
 import { formatDate, showModal, hideModal, showToast } from '../main.js'
 import { format, addMonths, subMonths, startOfMonth, endOfMonth, eachDayOfInterval, isSameDay, parseISO, isToday, isBefore, startOfWeek, endOfWeek } from 'date-fns'
 import { id as idLocale, enUS } from 'date-fns/locale'
@@ -30,15 +31,17 @@ export async function renderEvents(container) {
     currentMonth = parseInt(params.get('month'))
   }
 
-  // Get events
-  const [allEvents, monthEvents] = await Promise.all([
-    getAllEvents(),
-    getEventsByMonth(currentYear, currentMonth)
+  // Get events from Firestore
+  const [allEvents] = await Promise.all([
+    firestore.getEvents()
   ])
+
+  // Filter events for current month
+  const monthStr = `${currentYear}-${String(currentMonth).padStart(2, '0')}`
+  const monthEvents = allEvents.filter(e => e.date && e.date.startsWith(monthStr))
 
   // Add holidays to events
   const holidays = getHolidays()
-  const monthStr = `${currentYear}-${String(currentMonth).padStart(2, '0')}`
   const monthHolidays = holidays.filter(h => h.date.startsWith(monthStr))
 
   // Create event dates lookup (include holidays as fake events with negative IDs)
@@ -52,7 +55,7 @@ export async function renderEvents(container) {
     eventDates[h.date].push({ ...h, title: h.name, id: -Math.abs(h.date.split('-').join('')), isHoliday: true })
   })
 
-  const upcomingEvents = (await getUpcomingEvents(90)).sort((a, b) => a.date.localeCompare(b.date))
+  const upcomingEvents = (await firestore.getUpcomingEvents(90)).sort((a, b) => a.date.localeCompare(b.date))
 
   // Also get upcoming holidays for the next 90 days
   const today90 = new Date()
@@ -121,6 +124,7 @@ export async function renderEvents(container) {
         <!-- Events for selected date -->
         <div id="selected-date-events" class="mt-3 pt-3 border-t border-gray-100">
           <p class="text-xs text-gray-400 text-center">${lang === 'id' ? 'Klik tanggal untuk lihat agenda' : 'Tap a date to see events'}</p>
+          <button class="btn btn-primary btn-sm w-full mt-3" id="add-event-on-date-btn">+ ${t('events_add')}</button>
         </div>
       </div>
 
@@ -206,40 +210,40 @@ export async function renderEvents(container) {
           ${eventsOnDate.map(e => `
             <div class="list-item cursor-pointer event-item" data-id="${e.id}">
               <div class="flex items-center gap-2">
-                <span class="w-2 h-2 rounded-full" style="background: ${EVENT_COLORS[e.type]}"></span>
+                <span class="w-2 h-2 rounded-full" style="background: ${EVENT_COLORS[e.type] || EVENT_COLORS.other}"></span>
                 <span class="list-item-title">${e.title}</span>
               </div>
             </div>
           `).join('')}
+          <button class="btn btn-outline btn-sm w-full mt-2" id="add-event-on-date-btn">+ ${t('events_add')}</button>
         `
-        attachEventItemListeners(container)
+        attachEventItemListeners(container, allEvents)
       } else {
         container.innerHTML = `
           <p class="text-xs text-gray-500 mb-2">${formatDate(dateStr, lang)}</p>
-          <p class="text-xs text-gray-400">${t('events_no_events')}</p>
+          <p class="text-xs text-gray-400 mb-3">${t('events_no_events')}</p>
+          <button class="btn btn-primary btn-sm w-full" id="add-event-on-date-btn">+ ${t('events_add')}</button>
         `
+        document.getElementById('add-event-on-date-btn')?.addEventListener('click', () => showEventModal(null, dateStr))
       }
     })
   })
 
   // Event item click
-  attachEventItemListeners(container)
+  attachEventItemListeners(container, allEvents)
+
+  // Top-level add event button (when no date selected)
+  document.getElementById('add-event-on-date-btn')?.addEventListener('click', () => showEventModal())
 }
 
-function attachEventItemListeners(container) {
+function attachEventItemListeners(container, allEvents) {
   container.querySelectorAll('.event-item').forEach(item => {
     item.addEventListener('click', () => {
-      const id = parseInt(item.dataset.id)
-      getEventById(id).then(event => {
-        if (event) showEventModal(event)
-      })
+      const id = item.dataset.id
+      const event = allEvents.find(e => e.id === id)
+      if (event) showEventModal(event)
     })
   })
-}
-
-async function getEventById(id) {
-  const events = await getAllEvents()
-  return events.find(e => e.id === id)
 }
 
 // Event Modal
@@ -296,24 +300,41 @@ function showEventModal(existing = null, defaultDate = null) {
     }
 
     if (existing) {
-      await updateEvent(existing.id, data)
-      hideModal()
-      showToast(t('common_success'))
-      window.location.reload()
+      try {
+        await firestore.updateEvent(existing.id, data)
+        hideModal()
+        showToast(t('common_success'))
+        window.location.reload()
+      } catch (error) {
+        console.error('Error updating event:', error)
+        showToast(t('common_error'), 'error')
+      }
     } else {
-      await addEvent(data)
-      hideModal()
-      showToast(t('common_success'))
-      window.location.reload()
+      try {
+        await firestore.addEvent(data)
+        hideModal()
+        showToast(t('common_success'))
+        window.location.reload()
+      } catch (error) {
+        console.error('Error adding event:', error)
+        showToast(t('common_error'), 'error')
+      }
     }
   })
 
   if (existing) {
     document.getElementById('delete-btn').addEventListener('click', async () => {
-      await deleteEvent(existing.id)
-      hideModal()
-      showToast(t('common_success'))
-      window.location.reload()
+      if (confirm(t('common_confirm_delete'))) {
+        try {
+          await firestore.deleteEvent(existing.id)
+          hideModal()
+          showToast(t('common_success'))
+          window.location.reload()
+        } catch (error) {
+          console.error('Error deleting event:', error)
+          showToast(t('common_error'), 'error')
+        }
+      }
     })
   }
 }

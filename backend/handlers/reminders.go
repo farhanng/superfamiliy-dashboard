@@ -149,6 +149,24 @@ func (h *Handler) UpdateReminder(c *gin.Context) {
 func (h *Handler) DeleteReminder(c *gin.Context) {
 	id := c.Param("id")
 
+	// Check if reminder exists
+	reminders, err := h.svc.GetAllReminders()
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	found := false
+	for _, r := range reminders {
+		if r.ID == id {
+			found = true
+			break
+		}
+	}
+	if !found {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Reminder not found"})
+		return
+	}
+
 	if err := h.svc.DeleteReminder(id); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return

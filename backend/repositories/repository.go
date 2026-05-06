@@ -748,6 +748,12 @@ func (r *Repository) UpdateWhitelistUserStatus(email, status string) error {
 	return err
 }
 
+func (r *Repository) UpdateWhitelistEmail(oldEmail, newEmail string) error {
+	_, err := r.db.Exec(`UPDATE whitelist_users SET email = ?, updated_at = ? WHERE email = ?`,
+		newEmail, time.Now(), oldEmail)
+	return err
+}
+
 func (r *Repository) DeleteWhitelistUser(email string) error {
 	_, err := r.db.Exec(`DELETE FROM whitelist_users WHERE email = ?`, email)
 	return err

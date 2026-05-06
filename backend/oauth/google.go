@@ -168,8 +168,10 @@ func (g *GoogleOAuthClient) GetAuthURL(state, codeChallenge string) string {
 }
 
 // ExchangeCode exchanges an authorization code for tokens
-func (g *GoogleOAuthClient) ExchangeCode(ctx context.Context, code string) (*oauth2.Token, error) {
-	return g.config.Exchange(ctx, code)
+func (g *GoogleOAuthClient) ExchangeCode(ctx context.Context, code, codeVerifier string) (*oauth2.Token, error) {
+	return g.config.Exchange(ctx, code,
+		oauth2.SetAuthURLParam("code_verifier", codeVerifier),
+	)
 }
 
 // GetUserInfo retrieves user info from Google

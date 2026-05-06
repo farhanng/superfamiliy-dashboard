@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Seed Bills - SuperFamily Dashboard</title>
+  <style>
+    * { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; }
+    body { max-width: 600px; margin: 50px auto; padding: 20px; background: #f3f4f6; }
+    .card { background: white; border-radius: 12px; padding: 24px; margin-bottom: 20px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); }
+    h1 { color: #1f2937; margin-bottom: 10px; }
+    p { color: #6b7280; line-height: 1.6; }
+    .warning { background: #fef3c7; border: 1px solid #f59e0b; padding: 12px; border-radius: 8px; color: #92400e; margin-bottom: 20px; }
+    .success { background: #d1fae5; border: 1px solid #10b981; padding: 12px; border-radius: 8px; color: #065f46; margin-bottom: 20px; }
+    ul { list-style: none; padding: 0; }
+    li { padding: 8px 0; border-bottom: 1px solid #e5e7eb; display: flex; justify-content: space-between; }
+    li:last-child { border: none; }
+    .amount { font-weight: 600; color: #dc2626; }
+    .date { color: #6b7280; font-size: 14px; }
+    code { background: #e5e7eb; padding: 2px 6px; border-radius: 4px; font-size: 14px; }
+    pre { background: #1f2937; color: #10b981; padding: 16px; border-radius: 8px; overflow-x: auto; }
+    button { background: #3b82f6; color: white; border: none; padding: 12px 24px; border-radius: 8px; font-size: 16px; cursor: pointer; margin-top: 10px; }
+    button:hover { background: #2563eb; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h1>📋 Seed Bills - SuperFamily Dashboard</h1>
+    <p>Script untuk input tagihan awal ke dalam database.</p>
+  </div>
+
+  <div class="warning">
+    ⚠️ <strong>Penting:</strong> Jalankan script ini di tab browser yang sama dengan SuperFamily Dashboard yang sudah terbuka.
+  </div>
+
+  <div class="card">
+    <h3>Tagihan yang akan diinput:</h3>
+    <ul>
+      <li>
+        <div>
+          <strong>Pendidikan Zaidan (1)</strong>
+          <div class="date">Tiap tanggal 26 • Bulanan • Sampai Jan 2029</div>
+        </div>
+        <span class="amount">Rp 300.000</span>
+      </li>
+      <li>
+        <div>
+          <strong>Pendidikan Zaidan (2)</strong>
+          <div class="date">Tiap tanggal 26 • Bulanan • Sampai Jan 2034</div>
+        </div>
+        <span class="amount">Rp 700.000</span>
+      </li>
+      <li>
+        <div>
+          <strong>KPR (Cicilan Rumah)</strong>
+          <div class="date">Tanggal 28 • Bulanan • 10 tahun</div>
+        </div>
+        <span class="amount">Rp 6.100.000</span>
+      </li>
+      <li>
+        <div>
+          <strong>Kartu Kredit</strong>
+          <div class="date">Tanggal 28 • Bulanan • Nominal varies</div>
+        </div>
+        <span class="amount">Rp 0</span>
+      </li>
+      <li>
+        <div>
+          <strong>IPL</strong>
+          <div class="date">Tanggal 1 • Bulanan</div>
+        </div>
+        <span class="amount">Rp 150.000</span>
+      </li>
+      <li>
+        <div>
+          <strong>Air</strong>
+          <div class="date">Tanggal 26 • Bulanan • Nominal varies</div>
+        </div>
+        <span class="amount">Rp 0</span>
+      </li>
+      <li>
+        <div>
+          <strong>Token Listrik</strong>
+          <div class="date">Tanggal 25 • Bulanan</div>
+        </div>
+        <span class="amount">Rp 500.000</span>
+      </li>
+    </ul>
+    <br>
+    <h3>Pengingat yang akan diinput:</h3>
+    <ul>
+      <li>
+        <div>
+          <strong>Gaji ART</strong>
+          <div class="date">Mingguan • Sampai 12 May 2026</div>
+        </div>
+        <span class="amount">Rp 425.000</span>
+      </li>
+    </ul>
+  </div>
+
+  <div class="card">
+    <h3>Cara Jalankan:</h3>
+    <ol style="padding-left: 20px; line-height: 2;">
+      <li>Buka halaman SuperFamily Dashboard</li>
+      <li>Buka DevTools (F12 atau Ctrl+Shift+I)</li>
+      <li>Pergi ke tab <code>Console</code></li>
+      <li>Copy-paste script di bawah ini:</li>
+    </ol>
+    <pre>fetch('https://farhan.app/superfamily-dashboard/seed-bills.js').then(r=>r.text()).then(s=>eval(s))</pre>
+    <p style="margin-top: 12px;">Atau buka file langsung:</p>
+    <pre>fetch('file:///home/farhan/.openclaw/workspace/superfamily-dashboard/seed-bills.js').then(r=>r.text()).then(s=>eval(s))</pre>
+    <button onclick="window.open('superfamily-dashboard/dist/index.html')">Buka Dashboard</button>
+  </div>
+</body>
+</html>

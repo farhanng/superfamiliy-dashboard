@@ -1,15 +1,17 @@
 package services
 
 import (
+	"context"
 	"errors"
+	"superfamily-backend/firebase"
 	"superfamily-backend/middleware"
 	"superfamily-backend/models"
 	"superfamily-backend/repositories"
 )
 
 type Service struct {
-	repo     *repositories.Repository
-	sseMgr   *middleware.SSEClientManager
+	repo   *repositories.Repository
+	sseMgr *middleware.SSEClientManager
 }
 
 func New(repo *repositories.Repository, sseMgr *middleware.SSEClientManager) *Service {
@@ -99,27 +101,88 @@ func (s *Service) GetUserByID(id string) (*models.User, error) {
 // =====================
 
 func (s *Service) GetAllWhitelistUsers() ([]models.WhitelistUser, error) {
-	return s.repo.GetAllWhitelistUsers()
+	whitelistRepo := firebase.NewWhitelistRepository()
+	ctx := context.Background()
+	users, err := whitelistRepo.GetAll(ctx)
+	if err != nil {
+		return nil, err
+	}
+	// Convert to models.WhitelistUser
+	result := make([]models.WhitelistUser, 0, len(users))
+	for _, u := range users {
+		result = append(result, models.WhitelistUser{
+			ID:        u.ID,
+			Email:     u.Email,
+			Name:      u.Name,
+			Status:    u.Status,
+			CreatedAt: u.CreatedAt,
+			CreatedBy: u.CreatedBy,
+			UpdatedAt: u.UpdatedAt,
+		})
+	}
+	return result, nil
 }
 
 func (s *Service) AddToWhitelist(email, name, createdBy string) (*models.WhitelistUser, error) {
-	return s.repo.CreateWhitelistUser(email, name, createdBy)
+	whitelistRepo := firebase.NewWhitelistRepository()
+	ctx := context.Background()
+	user, err := whitelistRepo.Create(ctx, &firebase.WhitelistUser{
+		Email:     email,
+		Name:      name,
+		Status:    "active",
+		CreatedBy: &createdBy,
+	})
+	if err != nil {
+		return nil, err
+	}
+	return &models.WhitelistUser{
+		ID:        user.ID,
+		Email:     user.Email,
+		Name:      user.Name,
+		Status:    user.Status,
+		CreatedAt: user.CreatedAt,
+		CreatedBy: user.CreatedBy,
+		UpdatedAt: user.UpdatedAt,
+	}, nil
 }
 
 func (s *Service) RemoveFromWhitelist(email string) error {
-	return s.repo.DeleteWhitelistUser(email)
+	whitelistRepo := firebase.NewWhitelistRepository()
+	ctx := context.Background()
+	return whitelistRepo.Delete(ctx, email)
 }
 
 func (s *Service) SuspendWhitelistUser(email string) error {
-	return s.repo.UpdateWhitelistUserStatus(email, "suspended")
+	whitelistRepo := firebase.NewWhitelistRepository()
+	ctx := context.Background()
+	return whitelistRepo.UpdateStatus(ctx, email, "suspended")
 }
 
 func (s *Service) ActivateWhitelistUser(email string) error {
-	return s.repo.UpdateWhitelistUserStatus(email, "active")
+	whitelistRepo := firebase.NewWhitelistRepository()
+	ctx := context.Background()
+	return whitelistRepo.UpdateStatus(ctx, email, "active")
 }
 
 func (s *Service) CheckWhitelist(email string) (*models.WhitelistUser, error) {
-	return s.repo.GetWhitelistUserByEmail(email)
+	whitelistRepo := firebase.NewWhitelistRepository()
+	ctx := context.Background()
+	user, err := whitelistRepo.GetByEmail(ctx, email)
+	if err != nil {
+		return nil, err
+	}
+	if user == nil {
+		return nil, nil
+	}
+	return &models.WhitelistUser{
+		ID:        user.ID,
+		Email:     user.Email,
+		Name:      user.Name,
+		Status:    user.Status,
+		CreatedAt: user.CreatedAt,
+		CreatedBy: user.CreatedBy,
+		UpdatedAt: user.UpdatedAt,
+	}, nil
 }
 
 // =====================

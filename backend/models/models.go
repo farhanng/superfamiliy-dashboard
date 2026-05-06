@@ -1,6 +1,10 @@
 package models
 
-import "time"
+import (
+	"time"
+
+	"superfamily-backend/middleware"
+)
 
 // User represents a family member account
 type User struct {
@@ -13,6 +17,18 @@ type User struct {
 	CreatedAt    time.Time `json:"created_at"`
 }
 
+// Sanitize applies XSS escaping to user-generated fields
+func (u *User) Sanitize() {
+	u.Name = middleware.SanitizeUserName(u.Name)
+}
+
+// SanitizeForResponse returns a sanitized copy for JSON responses
+func (u *User) SanitizeForResponse() User {
+	out := *u
+	out.Sanitize()
+	return out
+}
+
 // WhitelistUser represents an authorized Google account
 type WhitelistUser struct {
 	ID        string    `json:"id"`
@@ -22,6 +38,18 @@ type WhitelistUser struct {
 	CreatedAt time.Time `json:"created_at"`
 	CreatedBy *string   `json:"created_by,omitempty"`
 	UpdatedAt time.Time `json:"updated_at"`
+}
+
+// Sanitize applies XSS escaping to user-generated fields
+func (w *WhitelistUser) Sanitize() {
+	w.Name = middleware.SanitizeUserName(w.Name)
+}
+
+// SanitizeForResponse returns a sanitized copy for JSON responses
+func (w *WhitelistUser) SanitizeForResponse() WhitelistUser {
+	out := *w
+	out.Sanitize()
+	return out
 }
 
 // UserAccount links local user to Google account
@@ -136,6 +164,28 @@ type FamilyMember struct {
 	Relationship string    `json:"relationship"`
 	Phone        string    `json:"phone"`
 	CreatedAt    time.Time `json:"created_at"`
+}
+
+// Sanitize applies XSS escaping to user-generated fields
+func (f *FamilyMember) Sanitize() {
+	f.Name = middleware.SanitizeUserName(f.Name)
+	f.Relationship = middleware.SanitizeUserInput(f.Relationship)
+}
+
+// SanitizeForResponse returns a sanitized copy for JSON responses
+func (f *FamilyMember) SanitizeForResponse() FamilyMember {
+	out := *f
+	out.Sanitize()
+	return out
+}
+
+// SanitizeAll applies sanitization to a slice of family members
+func SanitizeAllFamilyMembers(members []FamilyMember) []FamilyMember {
+	result := make([]FamilyMember, len(members))
+	for i, m := range members {
+		result[i] = m.SanitizeForResponse()
+	}
+	return result
 }
 
 // API Response types

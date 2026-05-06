@@ -2,7 +2,9 @@ package handlers
 
 import (
 	"net/http"
+	"regexp"
 	"strconv"
+	"time"
 
 	"superfamily-backend/models"
 
@@ -81,6 +83,25 @@ func (h *Handler) CreateTransaction(c *gin.Context) {
 		return
 	}
 
+	// Validate amount > 0
+	if req.Amount <= 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Amount must be greater than 0"})
+		return
+	}
+
+	// Validate type
+	txType := req.Type
+	if txType != "income" && txType != "expense" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Type must be 'income' or 'expense'"})
+		return
+	}
+
+	// Validate date format (YYYY-MM-DD)
+	if !isValidDate(req.Date) {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Date must be in YYYY-MM-DD format"})
+		return
+	}
+
 	status := req.Status
 	if status == "" {
 		status = "done"
@@ -90,7 +111,7 @@ func (h *Handler) CreateTransaction(c *gin.Context) {
 		Amount:   req.Amount,
 		Category: req.Category,
 		Date:     req.Date,
-		Type:     req.Type,
+		Type:     txType,
 		Status:   status,
 	}
 
@@ -137,6 +158,24 @@ func (h *Handler) UpdateTransaction(c *gin.Context) {
 		return
 	}
 
+	// Validate amount if provided
+	if req.Amount != 0 && req.Amount < 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Amount must be greater than 0"})
+		return
+	}
+
+	// Validate type if provided
+	if req.Type != "" && req.Type != "income" && req.Type != "expense" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Type must be 'income' or 'expense'"})
+		return
+	}
+
+	// Validate date format if provided
+	if req.Date != "" && !isValidDate(req.Date) {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Date must be in YYYY-MM-DD format"})
+		return
+	}
+
 	if req.Amount > 0 {
 		existing.Amount = req.Amount
 	}
@@ -167,12 +206,40 @@ func (h *Handler) UpdateTransaction(c *gin.Context) {
 func (h *Handler) DeleteTransaction(c *gin.Context) {
 	id := c.Param("id")
 
+	// Check if transaction exists
+	txs, err := h.svc.GetAllTransactions()
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	found := false
+	for _, t := range txs {
+		if t.ID == id {
+			found = true
+			break
+		}
+	}
+	if !found {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Transaction not found"})
+		return
+	}
+
 	if err := h.svc.DeleteTransaction(id); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
 
 	c.JSON(http.StatusOK, gin.H{"message": "Transaction deleted"})
+}
+
+// isValidDate checks if a date string is in YYYY-MM-DD format
+func isValidDate(date string) bool {
+	match, _ := regexp.MatchString(`^\d{4}-\d{2}-\d{2}$`, date)
+	if !match {
+		return false
+	}
+	_, err := time.Parse("2006-01-02", date)
+	return err == nil
 }
 
 // =====================

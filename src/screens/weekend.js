@@ -1,8 +1,9 @@
 // weekend.js - Weekend Activities Screen
 // Checklist-style activities untuk Sabtu-Minggu
+// Migrated to Firestore
 
 import { t, getLang } from '../i18n.js'
-import { addWeekendActivity, updateWeekendActivity, deleteWeekendActivity, getWeekendActivitiesByDate, getAllWeekendActivities } from '../db.js'
+import * as firestore from '../services/firestore.js'
 import { showModal, hideModal, showToast } from '../main.js'
 import { format, startOfWeek, addDays, parseISO } from 'date-fns'
 
@@ -31,21 +32,21 @@ export async function renderWeekend(container) {
   const saturday = format(weekStart, 'yyyy-MM-dd')
   const sunday = format(addDays(weekStart, 1), 'yyyy-MM-dd')
 
-  // Get activities
+  // Get activities from Firestore
   const [satActivities, sunActivities] = await Promise.all([
-    getWeekendActivitiesByDate(saturday),
-    getWeekendActivitiesByDate(sunday)
+    firestore.getWeekendActivityByDate(saturday),
+    firestore.getWeekendActivityByDate(sunday)
   ])
 
   // Initialize if not exists
   if (!satActivities) {
-    await addWeekendActivity({
+    await firestore.addWeekendActivity({
       date: saturday,
       activities: []
     })
   }
   if (!sunActivities) {
-    await addWeekendActivity({
+    await firestore.addWeekendActivity({
       date: sunday,
       activities: []
     })
@@ -53,8 +54,8 @@ export async function renderWeekend(container) {
 
   // Re-fetch after potential creation
   const [sat, sun] = await Promise.all([
-    getWeekendActivitiesByDate(saturday),
-    getWeekendActivitiesByDate(sunday)
+    firestore.getWeekendActivityByDate(saturday),
+    firestore.getWeekendActivityByDate(sunday)
   ])
 
   const satList = sat?.activities || []
@@ -156,10 +157,10 @@ export async function renderWeekend(container) {
     btn.addEventListener('click', () => {
       const date = btn.dataset.date
       showActivityModal(date, null, async (activity) => {
-        const activitiesData = await getWeekendActivitiesByDate(date)
+        const activitiesData = await firestore.getWeekendActivityByDate(date)
         const activities = activitiesData?.activities || []
         activities.push(activity)
-        await updateWeekendActivity(activitiesData.id, { activities })
+        await firestore.updateWeekendActivity(activitiesData.id, { activities })
         hideModal()
         showToast(t('common_success'))
         window.location.reload()
@@ -201,7 +202,7 @@ function attachActivityListeners(container) {
       const date = item.dataset.date
       const index = parseInt(item.dataset.index)
 
-      const activitiesData = await getWeekendActivitiesByDate(date)
+      const activitiesData = await firestore.getWeekendActivityByDate(date)
       const activities = [...(activitiesData?.activities || [])]
       const activity = activities[index]
 
@@ -212,7 +213,7 @@ function attachActivityListeners(container) {
         activity.completedAt = null
       }
 
-      await updateWeekendActivity(activitiesData.id, { activities })
+      await firestore.updateWeekendActivity(activitiesData.id, { activities })
       showToast(t('common_success'))
       window.location.reload()
     })
@@ -226,14 +227,14 @@ function attachActivityListeners(container) {
       const date = item.dataset.date
       const index = parseInt(item.dataset.index)
 
-      const activitiesData = await getWeekendActivitiesByDate(date)
+      const activitiesData = await firestore.getWeekendActivityByDate(date)
       const activity = activitiesData?.activities?.[index]
 
       if (activity) {
         showActivityModal(date, activity, async (updated) => {
           const activities = [...(activitiesData?.activities || [])]
           activities[index] = { ...activities[index], ...updated }
-          await updateWeekendActivity(activitiesData.id, { activities })
+          await firestore.updateWeekendActivity(activitiesData.id, { activities })
           hideModal()
           showToast(t('common_success'))
           window.location.reload()
@@ -241,7 +242,7 @@ function attachActivityListeners(container) {
           // Delete
           const activities = [...(activitiesData?.activities || [])]
           activities.splice(index, 1)
-          await updateWeekendActivity(activitiesData.id, { activities })
+          await firestore.updateWeekendActivity(activitiesData.id, { activities })
           hideModal()
           showToast(t('common_success'))
           window.location.reload()
@@ -326,13 +327,13 @@ window.showAddModal.weekend = () => {
   const date = today === 0 ? format(addDays(startOfWeek(new Date(), { weekStartsOn: 6 }), 1), 'yyyy-MM-dd') : format(startOfWeek(new Date(), { weekStartsOn: 6 }), 'yyyy-MM-dd')
 
   showActivityModal(date, null, async (activity) => {
-    const activitiesData = await getWeekendActivitiesByDate(date)
+    const activitiesData = await firestore.getWeekendActivityByDate(date)
     const activities = activitiesData?.activities || []
     activities.push(activity)
     if (activitiesData) {
-      await updateWeekendActivity(activitiesData.id, { activities })
+      await firestore.updateWeekendActivity(activitiesData.id, { activities })
     } else {
-      await addWeekendActivity({ date, activities })
+      await firestore.addWeekendActivity({ date, activities })
     }
     hideModal()
     showToast(t('common_success'))

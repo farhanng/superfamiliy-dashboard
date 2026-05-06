@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Seed Bills - SuperFamily</title>
+  <style>
+    body { font-family: sans-serif; max-width: 600px; margin: 50px auto; padding: 20px; }
+    h1 { color: #1f2937; }
+    .success { background: #d1fae5; padding: 12px; border-radius: 8px; color: #065f46; margin: 10px 0; }
+    .error { background: #fee2e2; padding: 12px; border-radius: 8px; color: #991b1b; margin: 10px 0; }
+    button { background: #3b82f6; color: white; border: none; padding: 12px 24px; border-radius: 8px; cursor: pointer; }
+  </style>
+</head>
+<body>
+  <h1>📋 SuperFamily Dashboard - H-2 Notifier</h1>
+  <div id="status">Loading...</div>
+  <button onclick="runNotifier()">Run H-2 Notifier</button>
+
+  <script>
+    const SEED_BILLS = [
+      { title: 'Pendidikan Zaidan (1)', amount: 300000, dueDate: '2026-05-02', frequency: 'monthly', category: 'pendidikan', isPaid: false, note: 'Auto-debit tanggal 26' },
+      { title: 'KPR (Cicilan Rumah)', amount: 6100000, dueDate: '2026-05-02', frequency: 'monthly', category: 'cicilan', isPaid: false, note: 'Auto-debit tanggal 28' },
+      { title: 'IPL', amount: 150000, dueDate: '2026-05-02', frequency: 'monthly', category: 'ipl', isPaid: false, note: 'Auto-debit tanggal 1' }
+    ];
+
+    const SEED_REMINDERS = [
+      { title: 'Gaji ART', amount: 425000, dueDate: '2026-05-02', frequency: 'weekly', category: 'lainnya', isPaid: false, note: 'Bayar setiap minggu' }
+    ];
+
+    function formatCurrency(num) {
+      return new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', minimumFractionDigits: 0 }).format(num);
+    }
+
+    async function seedAndNotify() {
+      const status = document.getElementById('status');
+      
+      if (!window.db) {
+        status.innerHTML = '<div class="error">❌ IndexedDB not available. Please open SuperFamily Dashboard first.</div>';
+        return;
+      }
+
+      status.innerHTML = '<div>🌱 Seeding test data...</div>';
+      
+      // Clear existing H-2 items first
+      const today = new Date();
+      const targetDate = new Date(today);
+      targetDate.setDate(targetDate.getDate() + 2);
+      const targetStr = targetDate.toISOString().split('T')[0];
+
+      // Clear any existing bills/reminders for target date
+      const existingBills = await window.db.bills.where('dueDate').equals(targetStr).toArray();
+      const existingRems = await window.db.reminders.where('dueDate').equals(targetStr).toArray();
+      
+      for (const b of existingBills) await window.db.bills.delete(b.id);
+      for (const r of existingRems) await window.db.reminders.delete(r.id);
+
+      // Add seed data
+      for (const bill of SEED_BILLS) {
+        await window.db.bills.add({ ...bill, notifiedAt: null, createdAt: new Date() });
+      }
+      for (const rem of SEED_REMINDERS) {
+        await window.db.reminders.add({ ...rem, notifiedAt: null, createdAt: new Date() });
+      }
+
+      // Query H-2 items
+      const todayStr = today.toISOString().split('T')[0];
+      const bills = await window.db.bills.filter(b => !b.isPaid && b.dueDate === targetStr && (!b.notifiedAt || b.notifiedAt < todayStr)).toArray();
+      const reminders = await window.db.reminders.filter(r => !r.isPaid && r.dueDate === targetStr && (!r.notifiedAt || r.notifiedAt < todayStr)).toArray();
+
+      const freqText = { weekly: 'Mingguan', monthly: 'Bulanan', yearly: 'Tahunan', one_time: 'Sekali' };
+
+      let message = '📋 *Tagihan & Pajak H-2*\n\n';
+      
+      if (bills.length > 0) {
+        message += '📄 *Tagihan:*\n';
+        for (const b of bills) {
+          message += `• ${b.title}: ${formatCurrency(b.amount)} (${freqText[b.frequency] || 'Bulanan'})\n`;
+        }
+        message += '\n';
+      }
+      
+      if (reminders.length > 0) {
+        message += '📋 *Pajak/Surat:*\n';
+        for (const r of reminders) {
+          message += `• ${r.title}: ${formatCurrency(r.amount)}\n`;
+        }
+        message += '\n';
+      }
+      
+      message += '_Semua ini perlu dibayar dalam 2 hari ya! 💸_';
+
+      status.innerHTML = '<div class="success">✅ Found ' + bills.length + ' bills and ' + reminders.length + ' reminders due on ' + targetStr + '<br><br>Message to send:<br><pre>' + message + '</pre></div>';
+
+      // Mark as notified
+      const todayStrOnly = today.toISOString().split('T')[0];
+      for (const b of bills) await window.db.bills.update(b.id, { notifiedAt: todayStrOnly });
+      for (const r of reminders) await window.db.reminders.update(r.id, { notifiedAt: todayStrOnly });
+
+      status.innerHTML += '<div class="success">✅ Marked as notified!</div>';
+    }
+
+    window.runNotifier = seedAndNotify;
+    document.getElementById('status').innerHTML = '<div>Ready. DB status: ' + (window.db ? '✅ Available' : '❌ Not available') + '</div>';
+  </script>
+</body>
+</html>

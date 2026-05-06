@@ -139,6 +139,24 @@ func (h *Handler) UpdateEvent(c *gin.Context) {
 func (h *Handler) DeleteEvent(c *gin.Context) {
 	id := c.Param("id")
 
+	// Check if event exists
+	events, err := h.svc.GetAllEvents()
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	found := false
+	for _, e := range events {
+		if e.ID == id {
+			found = true
+			break
+		}
+	}
+	if !found {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Event not found"})
+		return
+	}
+
 	if err := h.svc.DeleteEvent(id); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return

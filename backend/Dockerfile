@@ -4,19 +4,21 @@
 # ===========================================
 
 # Stage 1: Builder
-FROM golang:1.22-alpine AS builder
+FROM golang:1.23-alpine AS builder
 
 WORKDIR /app
 
 # Install build dependencies (including CGO for go-sqlite3)
 RUN apk add --no-cache git gcc musl-dev
 
-# Copy go mod files first (for caching)
-COPY go.mod go.sum ./
-RUN go mod download
+# Set Go to download toolchain automatically if version mismatch
+ENV GOTOOLCHAIN=auto
 
-# Copy source code
+# Copy source code first (needed for go mod to resolve imports)
 COPY . .
+
+# Download and tidy dependencies
+RUN go mod download && go mod tidy
 
 # Build the binary (CGO_ENABLED=1 required for go-sqlite3)
 RUN CGO_ENABLED=1 GOOS=linux go build -a -o server .
@@ -35,6 +37,9 @@ RUN mkdir -p /app/data && chown -R nobody:nobody /app
 
 # Copy binary from builder
 COPY --from=builder /app/server .
+
+# Copy Firebase service account JSON
+COPY firebase-service-account.json /app/firebase-service-account.json
 
 # Run as non-root user
 USER nobody:nobody
