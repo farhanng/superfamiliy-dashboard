@@ -38,6 +38,10 @@ func (h *Handler) GetMealPlans(c *gin.Context) {
 
 func (h *Handler) GetMealPlanByWeek(c *gin.Context) {
 	weekStart := c.Param("weekStart")
+	// Normalize to YYYY-MM-DD (strip any time component)
+	if len(weekStart) > 10 {
+		weekStart = weekStart[:10]
+	}
 
 	plan, err := h.svc.GetMealPlanByWeek(weekStart)
 	if err != nil {
@@ -60,8 +64,14 @@ func (h *Handler) CreateOrUpdateMealPlan(c *gin.Context) {
 		return
 	}
 
+	// Normalize weekStart to YYYY-MM-DD (strip any time component)
+	weekStart := req.WeekStart
+	if len(weekStart) > 10 {
+		weekStart = weekStart[:10]
+	}
+
 	plan := &models.MealPlan{
-		WeekStart: req.WeekStart,
+		WeekStart: weekStart,
 		Meals:     req.Meals,
 	}
 
@@ -78,7 +88,12 @@ func (h *Handler) CreateOrUpdateMealPlan(c *gin.Context) {
 }
 
 func (h *Handler) DeleteMealPlan(c *gin.Context) {
-	weekStart := c.Param("weekStart")
+	weekStart := c.Param("id")
+
+	// Normalize to YYYY-MM-DD (strip any time component)
+	if len(weekStart) > 10 {
+		weekStart = weekStart[:10]
+	}
 
 	// Check if meal plan exists
 	plan, err := h.svc.GetMealPlanByWeek(weekStart)

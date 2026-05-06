@@ -414,7 +414,7 @@ func createSchema() error {
 	CREATE TABLE IF NOT EXISTS weekend_activities (
 		id TEXT PRIMARY KEY,
 		date DATE NOT NULL,
-		activity TEXT NOT NULL,
+		activities TEXT NOT NULL,
 		status TEXT DEFAULT 'planned',
 		created_by TEXT REFERENCES users(id),
 		created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
