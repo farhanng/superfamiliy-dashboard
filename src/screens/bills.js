@@ -3,7 +3,7 @@
 // Migrated to Firestore
 
 import { t, getLang } from '../i18n.js'
-import * as firestore from '../services/firestore.js'
+import * as api from '../services/api.js'
 import { formatCurrency, formatDate, showModal, hideModal, showToast } from '../main.js'
 import { format, parseISO, differenceInDays, isPast, isToday } from 'date-fns'
 
@@ -19,8 +19,8 @@ export async function renderBills(container) {
 
   // Get all data from Firestore
   const [bills, reminders] = await Promise.all([
-    firestore.getBills(),
-    firestore.getReminders()
+    api.getBills(),
+    api.getReminders()
   ])
 
   // Sort by due date
@@ -266,7 +266,7 @@ function attachBillListeners(container, bills, today) {
       const id = btn.dataset.id
       const bill = bills.find(b => b.id === id)
       try {
-        await firestore.markBillPaid(id)
+        await api.markBillPaid(id)
         // Auto-generate next month's bill for recurring frequencies
         if (bill && bill.frequency && bill.frequency !== 'one_time') {
           const nextDate = new Date(bill.dueDate)
@@ -274,7 +274,7 @@ function attachBillListeners(container, bills, today) {
           else if (bill.frequency === 'weekly') nextDate.setDate(nextDate.getDate() + 7)
           else if (bill.frequency === 'yearly') nextDate.setFullYear(nextDate.getFullYear() + 1)
           const nextDueStr = nextDate.toISOString().split('T')[0]
-          await firestore.addBill({
+          await api.createBill({
             title: bill.title,
             amount: bill.amount,
             dueDate: nextDueStr,
@@ -299,7 +299,7 @@ function attachBillListeners(container, bills, today) {
       e.stopPropagation()
       const id = btn.dataset.id
       try {
-        await firestore.markBillUnpaid(id)
+        await api.markBillUnpaid(id)
         showToast(t('common_success'))
         window.location.reload()
       } catch (error) {
@@ -314,7 +314,7 @@ function attachBillListeners(container, bills, today) {
     btn.addEventListener('click', () => {
       showBillModal(null, async (data) => {
         try {
-          await firestore.addBill(data)
+          await api.createBill(data)
           hideModal()
           showToast(t('common_success'))
           window.location.reload()
@@ -344,7 +344,7 @@ function attachReminderListeners(container, reminders, today) {
       e.stopPropagation()
       const id = btn.dataset.id
       try {
-        await firestore.markReminderPaid(id)
+        await api.markReminderPaid(id)
         showToast(t('common_success'))
         window.location.reload()
       } catch (error) {
@@ -360,7 +360,7 @@ function attachReminderListeners(container, reminders, today) {
       e.stopPropagation()
       const id = btn.dataset.id
       try {
-        await firestore.markReminderUnpaid(id)
+        await api.markReminderUnpaid(id)
         showToast(t('common_success'))
         window.location.reload()
       } catch (error) {
@@ -439,7 +439,7 @@ function showBillModal(existing = null, onSave, onDelete) {
     }
     if (existing) {
       try {
-        await firestore.updateBill(existing.id, data)
+        await api.updateBill(existing.id, data)
         showToast(t('common_success'))
         hideModal()
         window.location.reload()
@@ -457,7 +457,7 @@ function showBillModal(existing = null, onSave, onDelete) {
     document.getElementById('delete-btn')?.addEventListener('click', async () => {
       if (confirm(t('common_confirm_delete'))) {
         try {
-          await firestore.deleteBill(existing.id)
+          await api.deleteBill(existing.id)
           hideModal()
           window.location.reload()
         } catch (error) {
@@ -538,7 +538,7 @@ function showReminderModal(existing = null, onSave, onDelete) {
     }
     if (existing) {
       try {
-        await firestore.updateReminder(existing.id, data)
+        await api.updateReminder(existing.id, data)
         showToast(t('common_success'))
         hideModal()
         window.location.reload()
@@ -556,7 +556,7 @@ function showReminderModal(existing = null, onSave, onDelete) {
     document.getElementById('delete-btn')?.addEventListener('click', async () => {
       if (confirm(t('common_confirm_delete'))) {
         try {
-          await firestore.deleteReminder(existing.id)
+          await api.deleteReminder(existing.id)
           hideModal()
           window.location.reload()
         } catch (error) {
@@ -593,7 +593,7 @@ window.showAddModal.bills = () => {
     hideModal()
     showBillModal(null, async (data) => {
       try {
-        await firestore.addBill(data)
+        await api.createBill(data)
         hideModal()
         showToast(t('common_success'))
         window.location.reload()
@@ -608,7 +608,7 @@ window.showAddModal.bills = () => {
     hideModal()
     showReminderModal(null, async (data) => {
       try {
-        await firestore.addReminder(data)
+        await api.createReminder(data)
         hideModal()
         showToast(t('common_success'))
         window.location.reload()

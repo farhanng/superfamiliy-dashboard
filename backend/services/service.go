@@ -3,10 +3,15 @@ package services
 import (
 	"context"
 	"errors"
+	"fmt"
+	"time"
+
 	"superfamily-backend/firebase"
 	"superfamily-backend/middleware"
 	"superfamily-backend/models"
 	"superfamily-backend/repositories"
+
+	"github.com/google/uuid"
 )
 
 type Service struct {
@@ -27,11 +32,10 @@ func (s *Service) SetSSEClientManager(mgr *middleware.SSEClientManager) {
 }
 
 // =====================
-// Auth Operations
+// Auth Operations (SQLite)
 // =====================
 
 func (s *Service) Register(email, password, name string) (*models.AuthResponse, error) {
-	// Check if user exists
 	existing, err := s.repo.GetUserByEmail(email)
 	if err != nil {
 		return nil, err
@@ -40,13 +44,11 @@ func (s *Service) Register(email, password, name string) (*models.AuthResponse, 
 		return nil, errors.New("user already exists")
 	}
 
-	// Create user
 	user, err := s.repo.CreateUser(email, password, name)
 	if err != nil {
 		return nil, err
 	}
 
-	// Get JWT secret - this is set in main.go
 	secret := middleware.GetJWTSecret()
 	if secret == "" {
 		return nil, errors.New("JWT secret not configured")
@@ -97,7 +99,7 @@ func (s *Service) GetUserByID(id string) (*models.User, error) {
 }
 
 // =====================
-// Whitelist Operations
+// Whitelist Operations (Firestore)
 // =====================
 
 func (s *Service) GetAllWhitelistUsers() ([]models.WhitelistUser, error) {
@@ -107,7 +109,6 @@ func (s *Service) GetAllWhitelistUsers() ([]models.WhitelistUser, error) {
 	if err != nil {
 		return nil, err
 	}
-	// Convert to models.WhitelistUser
 	result := make([]models.WhitelistUser, 0, len(users))
 	for _, u := range users {
 		result = append(result, models.WhitelistUser{
@@ -186,23 +187,19 @@ func (s *Service) CheckWhitelist(email string) (*models.WhitelistUser, error) {
 }
 
 // =====================
-// Google OAuth Operations
+// Google OAuth Operations (SQLite)
 // =====================
 
-// FindOrCreateUserFromGoogle finds existing user by Google email or creates new one
 func (s *Service) FindOrCreateUserFromGoogle(googleEmail, googleName, googleUserID string) (*models.User, error) {
-	// Check if Google account is already linked
 	account, err := s.repo.GetUserAccountByGoogleEmail(googleEmail)
 	if err != nil {
 		return nil, err
 	}
 
 	if account != nil {
-		// Existing user, return user info
 		return s.repo.GetUserByID(account.UserID)
 	}
 
-	// Create new user with Google account
 	user, err := s.repo.CreateUserWithGoogle(googleEmail, googleName, googleEmail, googleUserID, &googleName)
 	if err != nil {
 		return nil, err
@@ -212,22 +209,58 @@ func (s *Service) FindOrCreateUserFromGoogle(googleEmail, googleName, googleUser
 }
 
 // =====================
-// Bill Operations
+// Bill Operations (Firestore)
 // =====================
 
 func (s *Service) GetAllBills() ([]models.Bill, error) {
-	return s.repo.GetAllBills()
+	repo := firebase.NewBillsRepository()
+	ctx := context.Background()
+	fbills, err := repo.GetAll(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return firestoreBillsToModel(fbills), nil
 }
 
 func (s *Service) GetBillByID(id string) (*models.Bill, error) {
-	return s.repo.GetBillByID(id)
+	repo := firebase.NewBillsRepository()
+	ctx := context.Background()
+	fbill, err := repo.GetByID(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	if fbill == nil {
+		return nil, nil
+	}
+	bills := firestoreBillsToModel([]firebase.FirestoreBill{*fbill})
+	if len(bills) == 0 {
+		return nil, nil
+	}
+	return &bills[0], nil
 }
 
 func (s *Service) CreateBill(bill *models.Bill) error {
-	err := s.repo.CreateBill(bill)
-	if err != nil {
+	repo := firebase.NewBillsRepository()
+	ctx := context.Background()
+	fbill := &firebase.FirestoreBill{
+		ID:           uuid.New().String(),
+		Title:        bill.Title,
+		Amount:       bill.Amount,
+		DueDate:      bill.DueDate,
+		Frequency:    bill.Frequency,
+		Category:     bill.Category,
+		IsPaid:       bill.IsPaid,
+		PaidDate:     bill.PaidDate,
+		PaidBy:       bill.PaidBy,
+		NotifyBefore: bill.NotifyBefore,
+		NotifiedAt:   bill.NotifiedAt,
+		Note:         bill.Note,
+		CreatedBy:    bill.CreatedBy,
+	}
+	if err := repo.Create(ctx, fbill); err != nil {
 		return err
 	}
+	bill.ID = fbill.ID
 	if s.sseMgr != nil {
 		s.sseMgr.Broadcast("bills_updated", nil)
 	}
@@ -235,8 +268,25 @@ func (s *Service) CreateBill(bill *models.Bill) error {
 }
 
 func (s *Service) UpdateBill(bill *models.Bill) error {
-	err := s.repo.UpdateBill(bill)
-	if err != nil {
+	repo := firebase.NewBillsRepository()
+	ctx := context.Background()
+	fbill := &firebase.FirestoreBill{
+		ID:           bill.ID,
+		Title:        bill.Title,
+		Amount:       bill.Amount,
+		DueDate:      bill.DueDate,
+		Frequency:    bill.Frequency,
+		Category:     bill.Category,
+		IsPaid:       bill.IsPaid,
+		PaidDate:     bill.PaidDate,
+		PaidBy:       bill.PaidBy,
+		NotifyBefore: bill.NotifyBefore,
+		NotifiedAt:   bill.NotifiedAt,
+		Note:         bill.Note,
+		CreatedBy:    bill.CreatedBy,
+		CreatedAt:    bill.CreatedAt,
+	}
+	if err := repo.Update(ctx, fbill); err != nil {
 		return err
 	}
 	if s.sseMgr != nil {
@@ -246,8 +296,9 @@ func (s *Service) UpdateBill(bill *models.Bill) error {
 }
 
 func (s *Service) DeleteBill(id string) error {
-	err := s.repo.DeleteBill(id)
-	if err != nil {
+	repo := firebase.NewBillsRepository()
+	ctx := context.Background()
+	if err := repo.Delete(ctx, id); err != nil {
 		return err
 	}
 	if s.sseMgr != nil {
@@ -257,8 +308,9 @@ func (s *Service) DeleteBill(id string) error {
 }
 
 func (s *Service) MarkBillPaid(id string, paidBy string) error {
-	err := s.repo.MarkBillPaid(id, paidBy)
-	if err != nil {
+	repo := firebase.NewBillsRepository()
+	ctx := context.Background()
+	if err := repo.MarkPaid(ctx, id, paidBy); err != nil {
 		return err
 	}
 	if s.sseMgr != nil {
@@ -268,8 +320,9 @@ func (s *Service) MarkBillPaid(id string, paidBy string) error {
 }
 
 func (s *Service) MarkBillUnpaid(id string) error {
-	err := s.repo.MarkBillUnpaid(id)
-	if err != nil {
+	repo := firebase.NewBillsRepository()
+	ctx := context.Background()
+	if err := repo.MarkUnpaid(ctx, id); err != nil {
 		return err
 	}
 	if s.sseMgr != nil {
@@ -279,22 +332,51 @@ func (s *Service) MarkBillUnpaid(id string) error {
 }
 
 func (s *Service) GetBillsDueSoon(days int) ([]models.Bill, error) {
-	return s.repo.GetBillsDueSoon(days)
+	repo := firebase.NewBillsRepository()
+	ctx := context.Background()
+	fbills, err := repo.GetDueSoon(ctx, days)
+	if err != nil {
+		return nil, err
+	}
+	return firestoreBillsToModel(fbills), nil
 }
 
 // =====================
-// Reminder Operations
+// Reminder Operations (Firestore)
 // =====================
 
 func (s *Service) GetAllReminders() ([]models.Reminder, error) {
-	return s.repo.GetAllReminders()
+	repo := firebase.NewRemindersRepository()
+	ctx := context.Background()
+	frems, err := repo.GetAll(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return firestoreRemindersToModel(frems), nil
 }
 
 func (s *Service) CreateReminder(rem *models.Reminder) error {
-	err := s.repo.CreateReminder(rem)
-	if err != nil {
+	repo := firebase.NewRemindersRepository()
+	ctx := context.Background()
+	frem := &firebase.FirestoreReminder{
+		ID:           uuid.New().String(),
+		Title:        rem.Title,
+		Amount:       rem.Amount,
+		DueDate:      rem.DueDate,
+		Frequency:    rem.Frequency,
+		Category:     rem.Category,
+		IsPaid:       rem.IsPaid,
+		PaidDate:     rem.PaidDate,
+		PaidBy:       rem.PaidBy,
+		NotifyBefore: rem.NotifyBefore,
+		NotifiedAt:   rem.NotifiedAt,
+		Note:         rem.Note,
+		CreatedBy:    rem.CreatedBy,
+	}
+	if err := repo.Create(ctx, frem); err != nil {
 		return err
 	}
+	rem.ID = frem.ID
 	if s.sseMgr != nil {
 		s.sseMgr.Broadcast("reminders_updated", nil)
 	}
@@ -302,8 +384,25 @@ func (s *Service) CreateReminder(rem *models.Reminder) error {
 }
 
 func (s *Service) UpdateReminder(rem *models.Reminder) error {
-	err := s.repo.UpdateReminder(rem)
-	if err != nil {
+	repo := firebase.NewRemindersRepository()
+	ctx := context.Background()
+	frem := &firebase.FirestoreReminder{
+		ID:           rem.ID,
+		Title:        rem.Title,
+		Amount:       rem.Amount,
+		DueDate:      rem.DueDate,
+		Frequency:    rem.Frequency,
+		Category:     rem.Category,
+		IsPaid:       rem.IsPaid,
+		PaidDate:     rem.PaidDate,
+		PaidBy:       rem.PaidBy,
+		NotifyBefore: rem.NotifyBefore,
+		NotifiedAt:   rem.NotifiedAt,
+		Note:         rem.Note,
+		CreatedBy:    rem.CreatedBy,
+		CreatedAt:    rem.CreatedAt,
+	}
+	if err := repo.Update(ctx, frem); err != nil {
 		return err
 	}
 	if s.sseMgr != nil {
@@ -313,8 +412,9 @@ func (s *Service) UpdateReminder(rem *models.Reminder) error {
 }
 
 func (s *Service) DeleteReminder(id string) error {
-	err := s.repo.DeleteReminder(id)
-	if err != nil {
+	repo := firebase.NewRemindersRepository()
+	ctx := context.Background()
+	if err := repo.Delete(ctx, id); err != nil {
 		return err
 	}
 	if s.sseMgr != nil {
@@ -324,8 +424,9 @@ func (s *Service) DeleteReminder(id string) error {
 }
 
 func (s *Service) MarkReminderPaid(id string, paidBy string) error {
-	err := s.repo.MarkReminderPaid(id, paidBy)
-	if err != nil {
+	repo := firebase.NewRemindersRepository()
+	ctx := context.Background()
+	if err := repo.MarkPaid(ctx, id, paidBy); err != nil {
 		return err
 	}
 	if s.sseMgr != nil {
@@ -335,8 +436,9 @@ func (s *Service) MarkReminderPaid(id string, paidBy string) error {
 }
 
 func (s *Service) MarkReminderUnpaid(id string) error {
-	err := s.repo.MarkReminderUnpaid(id)
-	if err != nil {
+	repo := firebase.NewRemindersRepository()
+	ctx := context.Background()
+	if err := repo.MarkUnpaid(ctx, id); err != nil {
 		return err
 	}
 	if s.sseMgr != nil {
@@ -346,18 +448,36 @@ func (s *Service) MarkReminderUnpaid(id string) error {
 }
 
 // =====================
-// Event Operations
+// Event Operations (Firestore)
 // =====================
 
 func (s *Service) GetAllEvents() ([]models.Event, error) {
-	return s.repo.GetAllEvents()
+	repo := firebase.NewEventsRepository()
+	ctx := context.Background()
+	events, err := repo.GetAll(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return firestoreEventsToModel(events), nil
 }
 
 func (s *Service) CreateEvent(event *models.Event) error {
-	err := s.repo.CreateEvent(event)
-	if err != nil {
+	repo := firebase.NewEventsRepository()
+	ctx := context.Background()
+	fevent := &firebase.FirestoreEvent{
+		ID:         uuid.New().String(),
+		Title:      event.Title,
+		Date:       event.Date,
+		Type:       event.Type,
+		Color:      event.Color,
+		NotifyDays: event.NotifyDays,
+		Note:       event.Note,
+		CreatedBy:  event.CreatedBy,
+	}
+	if err := repo.Create(ctx, fevent); err != nil {
 		return err
 	}
+	event.ID = fevent.ID
 	if s.sseMgr != nil {
 		s.sseMgr.Broadcast("events_updated", nil)
 	}
@@ -365,8 +485,20 @@ func (s *Service) CreateEvent(event *models.Event) error {
 }
 
 func (s *Service) UpdateEvent(event *models.Event) error {
-	err := s.repo.UpdateEvent(event)
-	if err != nil {
+	repo := firebase.NewEventsRepository()
+	ctx := context.Background()
+	fevent := &firebase.FirestoreEvent{
+		ID:         event.ID,
+		Title:      event.Title,
+		Date:       event.Date,
+		Type:       event.Type,
+		Color:      event.Color,
+		NotifyDays: event.NotifyDays,
+		Note:       event.Note,
+		CreatedBy:  event.CreatedBy,
+		CreatedAt:  event.CreatedAt,
+	}
+	if err := repo.Update(ctx, fevent); err != nil {
 		return err
 	}
 	if s.sseMgr != nil {
@@ -376,8 +508,9 @@ func (s *Service) UpdateEvent(event *models.Event) error {
 }
 
 func (s *Service) DeleteEvent(id string) error {
-	err := s.repo.DeleteEvent(id)
-	if err != nil {
+	repo := firebase.NewEventsRepository()
+	ctx := context.Background()
+	if err := repo.Delete(ctx, id); err != nil {
 		return err
 	}
 	if s.sseMgr != nil {
@@ -387,22 +520,46 @@ func (s *Service) DeleteEvent(id string) error {
 }
 
 // =====================
-// Transaction Operations
+// Transaction Operations (Firestore)
 // =====================
 
 func (s *Service) GetAllTransactions() ([]models.Transaction, error) {
-	return s.repo.GetAllTransactions()
+	repo := firebase.NewTransactionsRepository()
+	ctx := context.Background()
+	txs, err := repo.GetAll(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return firestoreTransactionsToModel(txs), nil
 }
 
 func (s *Service) GetTransactionsByMonth(year, month int) ([]models.Transaction, error) {
-	return s.repo.GetTransactionsByMonth(year, month)
+	repo := firebase.NewTransactionsRepository()
+	ctx := context.Background()
+	txs, err := repo.GetByMonth(ctx, year, month)
+	if err != nil {
+		return nil, err
+	}
+	return firestoreTransactionsToModel(txs), nil
 }
 
 func (s *Service) CreateTransaction(tx *models.Transaction) error {
-	err := s.repo.CreateTransaction(tx)
-	if err != nil {
+	repo := firebase.NewTransactionsRepository()
+	ctx := context.Background()
+	ftx := &firebase.FirestoreTransaction{
+		ID:        uuid.New().String(),
+		Amount:    tx.Amount,
+		Category:  tx.Category,
+		Date:      tx.Date,
+		Type:      tx.Type,
+		Status:    tx.Status,
+		Note:      tx.Note,
+		CreatedBy: tx.CreatedBy,
+	}
+	if err := repo.Create(ctx, ftx); err != nil {
 		return err
 	}
+	tx.ID = ftx.ID
 	if s.sseMgr != nil {
 		s.sseMgr.Broadcast("transactions_updated", nil)
 	}
@@ -410,8 +567,20 @@ func (s *Service) CreateTransaction(tx *models.Transaction) error {
 }
 
 func (s *Service) UpdateTransaction(tx *models.Transaction) error {
-	err := s.repo.UpdateTransaction(tx)
-	if err != nil {
+	repo := firebase.NewTransactionsRepository()
+	ctx := context.Background()
+	ftx := &firebase.FirestoreTransaction{
+		ID:        tx.ID,
+		Amount:    tx.Amount,
+		Category:  tx.Category,
+		Date:      tx.Date,
+		Type:      tx.Type,
+		Status:    tx.Status,
+		Note:      tx.Note,
+		CreatedBy: tx.CreatedBy,
+		CreatedAt: tx.CreatedAt,
+	}
+	if err := repo.Update(ctx, ftx); err != nil {
 		return err
 	}
 	if s.sseMgr != nil {
@@ -421,8 +590,9 @@ func (s *Service) UpdateTransaction(tx *models.Transaction) error {
 }
 
 func (s *Service) DeleteTransaction(id string) error {
-	err := s.repo.DeleteTransaction(id)
-	if err != nil {
+	repo := firebase.NewTransactionsRepository()
+	ctx := context.Background()
+	if err := repo.Delete(ctx, id); err != nil {
 		return err
 	}
 	if s.sseMgr != nil {
@@ -432,16 +602,31 @@ func (s *Service) DeleteTransaction(id string) error {
 }
 
 // =====================
-// Budget Operations
+// Budget Operations (Firestore)
 // =====================
 
 func (s *Service) GetBudget(month string) (*models.Budget, error) {
-	return s.repo.GetBudget(month)
+	repo := firebase.NewBudgetsRepository()
+	ctx := context.Background()
+	fbudget, err := repo.Get(ctx, month)
+	if err != nil {
+		return nil, err
+	}
+	if fbudget == nil {
+		return nil, nil
+	}
+	return &models.Budget{
+		ID:        fbudget.ID,
+		Month:     fbudget.Month,
+		Amount:    fbudget.Amount,
+		UpdatedAt: fbudget.UpdatedAt,
+	}, nil
 }
 
 func (s *Service) SetBudget(month string, amount int) error {
-	err := s.repo.SetBudget(month, amount)
-	if err != nil {
+	repo := firebase.NewBudgetsRepository()
+	ctx := context.Background()
+	if err := repo.Set(ctx, month, amount); err != nil {
 		return err
 	}
 	if s.sseMgr != nil {
@@ -451,22 +636,50 @@ func (s *Service) SetBudget(month string, amount int) error {
 }
 
 // =====================
-// MealPlan Operations
+// MealPlan Operations (Firestore)
 // =====================
 
 func (s *Service) GetAllMealPlans() ([]models.MealPlan, error) {
-	return s.repo.GetAllMealPlans()
+	repo := firebase.NewMealPlansRepository()
+	ctx := context.Background()
+	plans, err := repo.GetAll(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return firestoreMealPlansToModel(plans), nil
 }
 
 func (s *Service) GetMealPlanByWeek(weekStart string) (*models.MealPlan, error) {
-	return s.repo.GetMealPlanByWeek(weekStart)
+	repo := firebase.NewMealPlansRepository()
+	ctx := context.Background()
+	plan, err := repo.GetByWeek(ctx, weekStart)
+	if err != nil {
+		return nil, err
+	}
+	if plan == nil {
+		return nil, nil
+	}
+	plans := firestoreMealPlansToModel([]firebase.FirestoreMealPlan{*plan})
+	if len(plans) == 0 {
+		return nil, nil
+	}
+	return &plans[0], nil
 }
 
 func (s *Service) CreateOrUpdateMealPlan(plan *models.MealPlan) error {
-	err := s.repo.CreateOrUpdateMealPlan(plan)
-	if err != nil {
+	repo := firebase.NewMealPlansRepository()
+	ctx := context.Background()
+	fplan := &firebase.FirestoreMealPlan{
+		WeekStart: plan.WeekStart,
+		Meals:     plan.Meals,
+		CreatedBy: plan.CreatedBy,
+	}
+	if err := repo.Upsert(ctx, fplan); err != nil {
 		return err
 	}
+	plan.ID = fplan.ID
+	plan.CreatedAt = fplan.CreatedAt
+	plan.UpdatedAt = fplan.UpdatedAt
 	if s.sseMgr != nil {
 		s.sseMgr.Broadcast("mealplans_updated", nil)
 	}
@@ -474,8 +687,9 @@ func (s *Service) CreateOrUpdateMealPlan(plan *models.MealPlan) error {
 }
 
 func (s *Service) DeleteMealPlan(id string) error {
-	err := s.repo.DeleteMealPlan(id)
-	if err != nil {
+	repo := firebase.NewMealPlansRepository()
+	ctx := context.Background()
+	if err := repo.Delete(ctx, id); err != nil {
 		return err
 	}
 	if s.sseMgr != nil {
@@ -485,18 +699,32 @@ func (s *Service) DeleteMealPlan(id string) error {
 }
 
 // =====================
-// WeekendActivity Operations
+// WeekendActivity Operations (Firestore)
 // =====================
 
 func (s *Service) GetAllWeekendActivities() ([]models.WeekendActivity, error) {
-	return s.repo.GetAllWeekendActivities()
+	repo := firebase.NewWeekendActivitiesRepository()
+	ctx := context.Background()
+	activities, err := repo.GetAll(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return firestoreWeekendActivitiesToModel(activities), nil
 }
 
 func (s *Service) CreateWeekendActivity(act *models.WeekendActivity) error {
-	err := s.repo.CreateWeekendActivity(act)
-	if err != nil {
+	repo := firebase.NewWeekendActivitiesRepository()
+	ctx := context.Background()
+	fact := &firebase.FirestoreWeekendActivity{
+		ID:         uuid.New().String(),
+		Date:       act.Date,
+		Activities: act.Activities,
+		CreatedBy:  act.CreatedBy,
+	}
+	if err := repo.Create(ctx, fact); err != nil {
 		return err
 	}
+	act.ID = fact.ID
 	if s.sseMgr != nil {
 		s.sseMgr.Broadcast("weekend_activities_updated", nil)
 	}
@@ -504,8 +732,16 @@ func (s *Service) CreateWeekendActivity(act *models.WeekendActivity) error {
 }
 
 func (s *Service) UpdateWeekendActivity(act *models.WeekendActivity) error {
-	err := s.repo.UpdateWeekendActivity(act)
-	if err != nil {
+	repo := firebase.NewWeekendActivitiesRepository()
+	ctx := context.Background()
+	fact := &firebase.FirestoreWeekendActivity{
+		ID:         act.ID,
+		Date:       act.Date,
+		Activities: act.Activities,
+		CreatedBy:  act.CreatedBy,
+		CreatedAt:  act.CreatedAt,
+	}
+	if err := repo.Update(ctx, fact); err != nil {
 		return err
 	}
 	if s.sseMgr != nil {
@@ -515,8 +751,9 @@ func (s *Service) UpdateWeekendActivity(act *models.WeekendActivity) error {
 }
 
 func (s *Service) DeleteWeekendActivity(id string) error {
-	err := s.repo.DeleteWeekendActivity(id)
-	if err != nil {
+	repo := firebase.NewWeekendActivitiesRepository()
+	ctx := context.Background()
+	if err := repo.Delete(ctx, id); err != nil {
 		return err
 	}
 	if s.sseMgr != nil {
@@ -526,7 +763,7 @@ func (s *Service) DeleteWeekendActivity(id string) error {
 }
 
 // =====================
-// FamilyMember Operations
+// FamilyMember Operations (SQLite - keep for now)
 // =====================
 
 func (s *Service) GetAllFamilyMembers() ([]models.FamilyMember, error) {
@@ -536,3 +773,127 @@ func (s *Service) GetAllFamilyMembers() ([]models.FamilyMember, error) {
 func (s *Service) CreateFamilyMember(m *models.FamilyMember) error {
 	return s.repo.CreateFamilyMember(m)
 }
+
+// =====================
+// Converter functions
+// =====================
+
+func firestoreBillsToModel(fbills []firebase.FirestoreBill) []models.Bill {
+	bills := make([]models.Bill, len(fbills))
+	for i, fb := range fbills {
+		bills[i] = models.Bill{
+			ID:           fb.ID,
+			Title:        fb.Title,
+			Amount:       fb.Amount,
+			DueDate:      fb.DueDate,
+			Frequency:    fb.Frequency,
+			Category:     fb.Category,
+			IsPaid:       fb.IsPaid,
+			PaidDate:     fb.PaidDate,
+			PaidBy:       fb.PaidBy,
+			NotifyBefore: fb.NotifyBefore,
+			NotifiedAt:   fb.NotifiedAt,
+			Note:         fb.Note,
+			CreatedBy:    fb.CreatedBy,
+			CreatedAt:    fb.CreatedAt,
+			UpdatedAt:    fb.UpdatedAt,
+		}
+	}
+	return bills
+}
+
+func firestoreRemindersToModel(frems []firebase.FirestoreReminder) []models.Reminder {
+	reminders := make([]models.Reminder, len(frems))
+	for i, fr := range frems {
+		reminders[i] = models.Reminder{
+			ID:           fr.ID,
+			Title:        fr.Title,
+			Amount:       fr.Amount,
+			DueDate:      fr.DueDate,
+			Frequency:    fr.Frequency,
+			Category:     fr.Category,
+			IsPaid:       fr.IsPaid,
+			PaidDate:     fr.PaidDate,
+			PaidBy:       fr.PaidBy,
+			NotifyBefore: fr.NotifyBefore,
+			NotifiedAt:   fr.NotifiedAt,
+			Note:         fr.Note,
+			CreatedBy:    fr.CreatedBy,
+			CreatedAt:    fr.CreatedAt,
+			UpdatedAt:    fr.UpdatedAt,
+		}
+	}
+	return reminders
+}
+
+func firestoreEventsToModel(fevents []firebase.FirestoreEvent) []models.Event {
+	events := make([]models.Event, len(fevents))
+	for i, fe := range fevents {
+		events[i] = models.Event{
+			ID:         fe.ID,
+			Title:      fe.Title,
+			Date:       fe.Date,
+			Type:       fe.Type,
+			Color:      fe.Color,
+			NotifyDays: fe.NotifyDays,
+			Note:       fe.Note,
+			CreatedBy:  fe.CreatedBy,
+			CreatedAt:  fe.CreatedAt,
+			UpdatedAt:  fe.UpdatedAt,
+		}
+	}
+	return events
+}
+
+func firestoreTransactionsToModel(ftxs []firebase.FirestoreTransaction) []models.Transaction {
+	txs := make([]models.Transaction, len(ftxs))
+	for i, ft := range ftxs {
+		txs[i] = models.Transaction{
+			ID:        ft.ID,
+			Amount:    ft.Amount,
+			Category:  ft.Category,
+			Date:      ft.Date,
+			Type:      ft.Type,
+			Status:    ft.Status,
+			Note:      ft.Note,
+			CreatedBy: ft.CreatedBy,
+			CreatedAt: ft.CreatedAt,
+			UpdatedAt: ft.UpdatedAt,
+		}
+	}
+	return txs
+}
+
+func firestoreMealPlansToModel(fplans []firebase.FirestoreMealPlan) []models.MealPlan {
+	plans := make([]models.MealPlan, len(fplans))
+	for i, fp := range fplans {
+		plans[i] = models.MealPlan{
+			ID:        fp.ID,
+			WeekStart: fp.WeekStart,
+			Meals:     fp.Meals,
+			CreatedBy: fp.CreatedBy,
+			CreatedAt: fp.CreatedAt,
+			UpdatedAt:  fp.UpdatedAt,
+		}
+	}
+	return plans
+}
+
+func firestoreWeekendActivitiesToModel(facts []firebase.FirestoreWeekendActivity) []models.WeekendActivity {
+	activities := make([]models.WeekendActivity, len(facts))
+	for i, fa := range facts {
+		activities[i] = models.WeekendActivity{
+			ID:         fa.ID,
+			Date:       fa.Date,
+			Activities: fa.Activities,
+			CreatedBy: fa.CreatedBy,
+			CreatedAt: fa.CreatedAt,
+			UpdatedAt: fa.UpdatedAt,
+		}
+	}
+	return activities
+}
+
+// Ensure time is used
+var _ = fmt.Sprintf
+var _ = time.Now

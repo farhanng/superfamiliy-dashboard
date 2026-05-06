@@ -146,15 +146,14 @@ type MealPlan struct {
 	UpdatedAt time.Time `json:"updated_at"`
 }
 
-// WeekendActivity represents a weekend plan
+// WeekendActivity represents a weekend plan (stores activities as JSON string)
 type WeekendActivity struct {
-	ID        string    `json:"id"`
-	Date      string    `json:"date"`
-	Activity  string    `json:"activity"`
-	Status    string    `json:"status"`
-	CreatedBy *string   `json:"created_by,omitempty"`
-	CreatedAt time.Time `json:"created_at"`
-	UpdatedAt time.Time `json:"updated_at"`
+	ID         string    `json:"id"`
+	Date       string    `json:"date"`
+	Activities string    `json:"activities"` // JSON string array of activity items
+	CreatedBy  *string   `json:"created_by,omitempty"`
+	CreatedAt  time.Time `json:"created_at"`
+	UpdatedAt  time.Time `json:"updated_at"`
 }
 
 // FamilyMember represents a family member

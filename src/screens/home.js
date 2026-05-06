@@ -3,7 +3,7 @@
 // Migrated to Firestore
 
 import { t, getLang } from '../i18n.js'
-import * as firestore from '../services/firestore.js'
+import * as api from '../services/api.js'
 import { formatCurrency, formatDate } from '../main.js'
 import { format, startOfWeek, addDays, isToday, isThisWeek, parseISO } from 'date-fns'
 import { id as idLocale, enUS } from 'date-fns/locale'
@@ -16,16 +16,23 @@ export async function renderHome(container) {
   const currentMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
   const today = format(now, 'yyyy-MM-dd')
 
-  // Get data from Firestore
-  const [budget, events, billsDueSoon, allBills] = await Promise.all([
-    firestore.getBudget(currentMonth),
-    firestore.getUpcomingEvents(14),
-    firestore.getBillsDueSoon(7),
-    firestore.getBills()
+  // Get data from backend API
+  const [budget, allEvents, billsDueSoon, allBills] = await Promise.all([
+    api.getBudget(currentMonth),
+    api.getEvents(),
+    api.getBillsDueSoon(7),
+    api.getBills()
   ])
 
+  // Filter upcoming events for next 14 days
+  const today14 = new Date()
+  today14.setDate(today14.getDate() + 14)
+  const todayStr = format(new Date(), 'yyyy-MM-dd')
+  const future14Str = format(today14, 'yyyy-MM-dd')
+  const events = allEvents.filter(e => e.date && e.date >= todayStr && e.date <= future14Str)
+
   // Calculate budget spent this month
-  const transactions = await firestore.getTransactionsByMonth(now.getFullYear(), now.getMonth() + 1)
+  const transactions = await api.getTransactionsByMonth(now.getFullYear(), now.getMonth() + 1)
   const totalSpent = transactions.reduce((sum, t) => sum + (t.amount || 0), 0)
   const budgetAmount = budget?.amount || 0
   const budgetRemaining = budgetAmount - totalSpent
@@ -44,17 +51,17 @@ export async function renderHome(container) {
   }
   const saturday = format(weekendStart, 'yyyy-MM-dd')
   const sunday = format(addDays(weekendStart, 1), 'yyyy-MM-dd')
-  const [satActivities, sunActivities] = await Promise.all([
-    firestore.getWeekendActivityByDate(saturday),
-    firestore.getWeekendActivityByDate(sunday)
-  ])
+  // Get all weekend activities and filter by date
+  const allWeekendActivities = await api.getWeekendActivities()
+  const satActivities = allWeekendActivities.find(a => a.date === saturday) || null
+  const sunActivities = allWeekendActivities.find(a => a.date === sunday) || null
 
   const weekendProgress = calculateWeekendProgress(satActivities, sunActivities)
 
   // Get meal plan for THIS week (current week, not next weekend)
   const thisWeekStart = startOfWeek(now, { weekStartsOn: 1 }) // Monday
   const thisWeekSaturday = format(addDays(thisWeekStart, 5), 'yyyy-MM-dd')
-  const mealPlan = await firestore.getMealPlanByWeek(thisWeekSaturday)
+  const mealPlan = await api.getMealPlanByWeek(thisWeekSaturday)
   const DAYS = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday']
   const mealIcons = { breakfast: '🌅', lunch: '☀️', dinner: '🌙' }
   const todayDayKey = DAYS[now.getDay() === 0 ? 6 : now.getDay() - 1]

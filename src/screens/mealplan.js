@@ -3,7 +3,7 @@
 // Migrated to Firestore
 
 import { t, getLang } from '../i18n.js'
-import * as firestore from '../services/firestore.js'
+import * as api from '../services/api.js'
 import { showModal, hideModal, showToast } from '../main.js'
 import { format, startOfWeek, addDays, subWeeks, addWeeks, parseISO } from 'date-fns'
 import { SAMPLE_MENUS } from '../data/sample-menus.js'
@@ -40,7 +40,7 @@ export async function renderMealPlan(container) {
   })
 
   // Get meal plan for this week from Firestore
-  let mealPlan = await firestore.getMealPlanByWeek(weekStartStr)
+  let mealPlan = await api.getMealPlanByWeek(weekStartStr)
 
   // Initialize default meals structure if no plan exists
   if (!mealPlan) {
@@ -174,7 +174,7 @@ export async function renderMealPlan(container) {
   document.getElementById('copy-last-week').addEventListener('click', async () => {
     const lastWeekStart = subWeeks(weekStart, 1)
     const lastWeekStr = format(lastWeekStart, 'yyyy-MM-dd')
-    const lastWeekPlan = await firestore.getMealPlanByWeek(lastWeekStr)
+    const lastWeekPlan = await api.getMealPlanByWeek(lastWeekStr)
 
     if (lastWeekPlan && lastWeekPlan.meals) {
       // Copy meals from last week
@@ -184,7 +184,7 @@ export async function renderMealPlan(container) {
       }
 
       // Upsert the plan
-      await firestore.upsertMealPlan(weekStartStr, newPlan.meals)
+      await api.createOrUpdateMealPlan({ week_start: weekStartStr, meals: newPlan.meals })
 
       showToast(t('common_success'))
       window.location.reload()
@@ -208,7 +208,7 @@ export async function renderMealPlan(container) {
         mealPlan.meals[day][meal] = newValue
 
         // Save to Firestore
-        await firestore.upsertMealPlan(weekStartStr, JSON.stringify(mealPlan.meals))
+        await api.createOrUpdateMealPlan({ week_start: weekStartStr, meals: JSON.stringify(mealPlan.meals) })
 
         showToast(t('common_success'))
         window.location.reload()
@@ -226,7 +226,7 @@ export async function renderMealPlan(container) {
           mealPlan.meals[todayKey] = { breakfast: '', lunch: '', dinner: '' }
         }
         mealPlan.meals[todayKey].lunch = newValue
-        await firestore.upsertMealPlan(weekStartStr, JSON.stringify(mealPlan.meals))
+        await api.createOrUpdateMealPlan({ week_start: weekStartStr, meals: JSON.stringify(mealPlan.meals) })
         showToast(t('common_success'))
         window.location.reload()
       })
@@ -306,7 +306,7 @@ window.showAddModal.mealplan = () => {
       const weekStartStr = format(weekStart, 'yyyy-MM-dd')
       const dayKey = DAYS[now.getDay() === 0 ? 6 : now.getDay() - 1]
 
-      let mealPlan = await firestore.getMealPlanByWeek(weekStartStr)
+      let mealPlan = await api.getMealPlanByWeek(weekStartStr)
       if (!mealPlan) {
         mealPlan = { weekStart: weekStartStr, meals: {} }
         DAYS.forEach(d => mealPlan.meals[d] = { breakfast: '', lunch: '', dinner: '' })
@@ -323,7 +323,7 @@ window.showAddModal.mealplan = () => {
       }
       mealPlan.meals[dayKey].breakfast = value
 
-      await firestore.upsertMealPlan(weekStartStr, JSON.stringify(mealPlan.meals))
+      await api.createOrUpdateMealPlan({ week_start: weekStartStr, meals: JSON.stringify(mealPlan.meals) })
 
       hideModal()
       showToast(t('common_success'))

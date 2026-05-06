@@ -578,59 +578,6 @@ func (r *Repository) DeleteMealPlan(id string) error {
 // WeekendActivity Operations
 // =====================
 
-func (r *Repository) GetAllWeekendActivities() ([]models.WeekendActivity, error) {
-	rows, err := r.db.Query(`
-		SELECT id, date, activity, status, created_by, created_at, updated_at
-		FROM weekend_activities ORDER BY date DESC
-	`)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
-	var activities []models.WeekendActivity
-	for rows.Next() {
-		var act models.WeekendActivity
-		err := rows.Scan(
-			&act.ID, &act.Date, &act.Activity, &act.Status, &act.CreatedBy, &act.CreatedAt, &act.UpdatedAt,
-		)
-		if err != nil {
-			return nil, err
-		}
-		activities = append(activities, act)
-	}
-
-	return activities, nil
-}
-
-func (r *Repository) CreateWeekendActivity(act *models.WeekendActivity) error {
-	act.ID = uuid.New().String()
-	act.CreatedAt = time.Now()
-	act.UpdatedAt = time.Now()
-
-	_, err := r.db.Exec(`
-		INSERT INTO weekend_activities (id, date, activity, status, created_by, created_at, updated_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?)
-	`, act.ID, act.Date, act.Activity, act.Status, act.CreatedBy, act.CreatedAt, act.UpdatedAt)
-
-	return err
-}
-
-func (r *Repository) UpdateWeekendActivity(act *models.WeekendActivity) error {
-	act.UpdatedAt = time.Now()
-	_, err := r.db.Exec(`
-		UPDATE weekend_activities SET date=?, activity=?, status=?, created_by=?, updated_at=?
-		WHERE id=?
-	`, act.Date, act.Activity, act.Status, act.CreatedBy, act.UpdatedAt, act.ID)
-
-	return err
-}
-
-func (r *Repository) DeleteWeekendActivity(id string) error {
-	_, err := r.db.Exec(`DELETE FROM weekend_activities WHERE id = ?`, id)
-	return err
-}
-
 // =====================
 // FamilyMember Operations
 // =====================

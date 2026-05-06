@@ -104,15 +104,13 @@ func (h *Handler) DeleteMealPlan(c *gin.Context) {
 // =====================
 
 type CreateWeekendActivityRequest struct {
-	Date     string `json:"date" binding:"required"`
-	Activity string `json:"activity" binding:"required"`
-	Status   string `json:"status"`
+	Date       string `json:"date" binding:"required"`
+	Activities string `json:"activities"` // JSON string of activities array
 }
 
 type UpdateWeekendActivityRequest struct {
-	Date     string `json:"date"`
-	Activity string `json:"activity"`
-	Status   string `json:"status"`
+	Date       string `json:"date"`
+	Activities string `json:"activities"`
 }
 
 func (h *Handler) GetWeekendActivities(c *gin.Context) {
@@ -136,15 +134,14 @@ func (h *Handler) CreateWeekendActivity(c *gin.Context) {
 		return
 	}
 
-	status := req.Status
-	if status == "" {
-		status = "planned"
+	activities := req.Activities
+	if activities == "" {
+		activities = "[]"
 	}
 
 	act := &models.WeekendActivity{
-		Date:     req.Date,
-		Activity: req.Activity,
-		Status:   status,
+		Date:       req.Date,
+		Activities: activities,
 	}
 
 	if userID := c.GetString("userID"); userID != "" {
@@ -190,11 +187,8 @@ func (h *Handler) UpdateWeekendActivity(c *gin.Context) {
 	if req.Date != "" {
 		existing.Date = req.Date
 	}
-	if req.Activity != "" {
-		existing.Activity = req.Activity
-	}
-	if req.Status != "" {
-		existing.Status = req.Status
+	if req.Activities != "" {
+		existing.Activities = req.Activities
 	}
 
 	if err := h.svc.UpdateWeekendActivity(existing); err != nil {

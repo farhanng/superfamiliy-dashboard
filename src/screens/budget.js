@@ -3,7 +3,7 @@
 // Migrated to Firestore
 
 import { t, getLang } from '../i18n.js'
-import * as firestore from '../services/firestore.js'
+import * as api from '../services/api.js'
 import { formatCurrency, formatDate, showModal, hideModal, showToast } from '../main.js'
 import { format, addMonths, subMonths, parseISO } from 'date-fns'
 
@@ -35,8 +35,8 @@ export async function renderBudget(container) {
 
   // Get data from Firestore
   const [transactions, budget] = await Promise.all([
-    firestore.getTransactionsByMonth(currentYear, currentMonth),
-    firestore.getBudget(monthKey)
+    api.getTransactionsByMonth(currentYear, currentMonth),
+    api.getBudget(monthKey)
   ])
 
   // Calculate totals
@@ -150,7 +150,7 @@ export async function renderBudget(container) {
   // Add income button
   document.getElementById('add-income-btn').addEventListener('click', () => {
     showTransactionModal(null, 'income', async (data) => {
-      await firestore.addTransaction({ ...data, type: 'income', status: data.status || 'not_done' })
+      await api.createTransaction({ ...data, type: 'income', status: data.status || 'not_done' })
       showToast(t('common_success'))
       renderBudget(container)
     })
@@ -159,7 +159,7 @@ export async function renderBudget(container) {
   // Add expense button
   document.getElementById('add-expense-btn').addEventListener('click', () => {
     showTransactionModal(null, 'expense', async (data) => {
-      await firestore.addTransaction({ ...data, type: 'expense', status: data.status || 'not_done' })
+      await api.createTransaction({ ...data, type: 'expense', status: data.status || 'not_done' })
       showToast(t('common_success'))
       renderBudget(container)
     })
@@ -171,12 +171,12 @@ export async function renderBudget(container) {
       const id = item.dataset.id
       const trx = transactions.find(t => t.id === id)
       if (trx) showTransactionModal(trx, trx.type, async (data) => {
-        await firestore.updateTransaction(id, { ...data, type: trx.type })
+        await api.updateTransaction(id, { ...data, type: trx.type })
         hideModal()
         showToast(t('common_success'))
         renderBudget(container)
       }, async () => {
-        await firestore.deleteTransaction(id)
+        await api.deleteTransaction(id)
         hideModal()
         showToast(t('common_success'))
         renderBudget(container)

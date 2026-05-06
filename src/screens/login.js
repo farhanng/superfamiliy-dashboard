@@ -1,14 +1,13 @@
-// screens/login.js - Login screen (Firebase Auth)
+// screens/login.js - Login screen (Backend OAuth)
 import { t, getLang } from '../i18n.js'
-import { signInWithGoogle, onAuthStateChange, getCurrentUser, logout } from '../firebase.js'
+import { login, isAuthenticated, getCurrentUser, getToken } from '../services/api.js'
 import { showToast } from '../main.js'
 
 export function renderLogin(container) {
   const lang = getLang()
 
-  // Check if already authenticated with Firebase
-  const user = getCurrentUser()
-  if (user) {
+  // Check if already authenticated with backend
+  if (isAuthenticated()) {
     window.location.hash = 'home'
     return
   }
@@ -21,7 +20,7 @@ export function renderLogin(container) {
         <p class="text-gray-500">Dashboard keluarga Farhan & Inne</p>
       </div>
 
-      <!-- Firebase Auth -->
+      <!-- Login Form -->
       <div class="w-full max-w-sm">
         <div class="card text-center">
           <h2 class="text-xl font-semibold text-gray-700 mb-4">
@@ -29,9 +28,34 @@ export function renderLogin(container) {
           </h2>
           <p class="text-gray-500 mb-6 text-sm">
             ${lang === 'id' 
-              ? 'Masuk dengan akun Google Anda untuk mengakses dashboard keluarga.' 
-              : 'Sign in with your Google account to access the family dashboard.'}
+              ? 'Masuk untuk mengakses dashboard keluarga.' 
+              : 'Sign in to access the family dashboard.'}
           </p>
+          
+          <!-- Email/Password Form -->
+          <form id="login-form" class="space-y-3 text-left">
+            <div>
+              <label class="block text-sm font-medium text-gray-600 mb-1">Email</label>
+              <input type="email" id="login-email" required
+                class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent"
+                placeholder="email@contoh.com">
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-gray-600 mb-1">${lang === 'id' ? 'Password' : 'Password'}</label>
+              <input type="password" id="login-password" required
+                class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent"
+                placeholder="••••••">
+            </div>
+            <button type="submit" id="login-submit"
+              class="w-full py-3 bg-primary text-white rounded-lg font-medium hover:bg-primary/90 transition-colors">
+              ${lang === 'id' ? 'Masuk' : 'Login'}
+            </button>
+          </form>
+          
+          <div class="relative my-4">
+            <div class="absolute inset-0 flex items-center"><div class="w-full border-t border-gray-200"></div></div>
+            <div class="relative flex justify-center text-sm"><span class="px-2 bg-white text-gray-400">${lang === 'id' ? 'atau' : 'or'}</span></div>
+          </div>
           
           <!-- Google OAuth Button -->
           <button id="google-login-btn"
@@ -64,32 +88,41 @@ export function renderLogin(container) {
     </div>
   `
 
-  // Google login button handler
-  const loginBtn = document.getElementById('google-login-btn')
+  // Email/Password login
+  const form = document.getElementById('login-form')
+  const emailInput = document.getElementById('login-email')
+  const passwordInput = document.getElementById('login-password')
+  const submitBtn = document.getElementById('login-submit')
   const loadingEl = document.getElementById('login-loading')
   const errorEl = document.getElementById('login-error')
 
-  loginBtn.addEventListener('click', async () => {
-    loginBtn.disabled = true
-    loginBtn.classList.add('opacity-50', 'cursor-not-allowed')
+  form.addEventListener('submit', async (e) => {
+    e.preventDefault()
+    submitBtn.disabled = true
+    submitBtn.classList.add('opacity-50', 'cursor-not-allowed')
     loadingEl.classList.remove('hidden')
     errorEl.classList.add('hidden')
 
     try {
-      const result = await signInWithGoogle()
-      console.log('Firebase Auth successful:', result.user.email)
+      const result = await login(emailInput.value, passwordInput.value)
       showToast(lang === 'id' ? 'Login berhasil!' : 'Login successful!')
       window.location.hash = 'home'
     } catch (error) {
-      console.error('Firebase Auth error:', error)
-      loginBtn.disabled = false
-      loginBtn.classList.remove('opacity-50', 'cursor-not-allowed')
-      loadingEl.classList.add('hidden')
-      
-      // Show error message
+      submitBtn.disabled = false
+      submitBtn.classList.remove('opacity-50', 'cursor-not-allowed')
       errorEl.textContent = error.message || (lang === 'id' ? 'Login gagal. Silakan coba lagi.' : 'Login failed. Please try again.')
       errorEl.classList.remove('hidden')
+    } finally {
+      loadingEl.classList.add('hidden')
     }
+  })
+
+  // Google OAuth button
+  const googleBtn = document.getElementById('google-login-btn')
+  googleBtn.addEventListener('click', () => {
+    // Redirect to backend Google OAuth
+    const oauthUrl = `${import.meta.env.VITE_API_URL || 'http://localhost:3001'}/api/auth/google`
+    window.location.href = oauthUrl
   })
 }
 

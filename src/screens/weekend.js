@@ -3,7 +3,7 @@
 // Migrated to Firestore
 
 import { t, getLang } from '../i18n.js'
-import * as firestore from '../services/firestore.js'
+import * as api from '../services/api.js'
 import { showModal, hideModal, showToast } from '../main.js'
 import { format, startOfWeek, addDays, parseISO } from 'date-fns'
 
@@ -13,6 +13,29 @@ const CATEGORY_ICONS = {
   indoor: '🏠',
   education: '📚',
   family: '👨‍👩‍👦'
+}
+
+// Helper to get weekend activity by date from all activities
+async function getWeekendActivityByDate(date) {
+  const all = await api.getWeekendActivities()
+  const found = all.find(a => a.date === date)
+  if (!found) return null
+  // Parse activities JSON string
+  if (found.activities && typeof found.activities === 'string') {
+    try {
+      found.activities = JSON.parse(found.activities)
+    } catch(e) {
+      found.activities = []
+    }
+  }
+  return found
+}
+
+// Helper for addWeekendActivity (creates doc with activities array)
+async function addWeekendActivityAPI(data) {
+  const activities = data.activities || []
+  const activitiesStr = typeof activities === 'string' ? activities : JSON.stringify(activities)
+  return api.createWeekendActivity({ date: data.date, activities: activitiesStr })
 }
 
 export async function renderWeekend(container) {
@@ -34,19 +57,19 @@ export async function renderWeekend(container) {
 
   // Get activities from Firestore
   const [satActivities, sunActivities] = await Promise.all([
-    firestore.getWeekendActivityByDate(saturday),
-    firestore.getWeekendActivityByDate(sunday)
+    getWeekendActivityByDate(saturday),
+    getWeekendActivityByDate(sunday)
   ])
 
   // Initialize if not exists
   if (!satActivities) {
-    await firestore.addWeekendActivity({
+    await addWeekendActivityAPI({
       date: saturday,
       activities: []
     })
   }
   if (!sunActivities) {
-    await firestore.addWeekendActivity({
+    await addWeekendActivityAPI({
       date: sunday,
       activities: []
     })
@@ -54,8 +77,8 @@ export async function renderWeekend(container) {
 
   // Re-fetch after potential creation
   const [sat, sun] = await Promise.all([
-    firestore.getWeekendActivityByDate(saturday),
-    firestore.getWeekendActivityByDate(sunday)
+    getWeekendActivityByDate(saturday),
+    getWeekendActivityByDate(sunday)
   ])
 
   const satList = sat?.activities || []
@@ -157,10 +180,10 @@ export async function renderWeekend(container) {
     btn.addEventListener('click', () => {
       const date = btn.dataset.date
       showActivityModal(date, null, async (activity) => {
-        const activitiesData = await firestore.getWeekendActivityByDate(date)
+        const activitiesData = await getWeekendActivityByDate(date)
         const activities = activitiesData?.activities || []
         activities.push(activity)
-        await firestore.updateWeekendActivity(activitiesData.id, { activities })
+        await api.updateWeekendActivity(activitiesData.id, { activities: JSON.stringify(activities) })
         hideModal()
         showToast(t('common_success'))
         window.location.reload()
@@ -202,7 +225,7 @@ function attachActivityListeners(container) {
       const date = item.dataset.date
       const index = parseInt(item.dataset.index)
 
-      const activitiesData = await firestore.getWeekendActivityByDate(date)
+      const activitiesData = await getWeekendActivityByDate(date)
       const activities = [...(activitiesData?.activities || [])]
       const activity = activities[index]
 
@@ -213,7 +236,7 @@ function attachActivityListeners(container) {
         activity.completedAt = null
       }
 
-      await firestore.updateWeekendActivity(activitiesData.id, { activities })
+      await api.updateWeekendActivity(activitiesData.id, { activities: JSON.stringify(activities) })
       showToast(t('common_success'))
       window.location.reload()
     })
@@ -227,14 +250,14 @@ function attachActivityListeners(container) {
       const date = item.dataset.date
       const index = parseInt(item.dataset.index)
 
-      const activitiesData = await firestore.getWeekendActivityByDate(date)
+      const activitiesData = await getWeekendActivityByDate(date)
       const activity = activitiesData?.activities?.[index]
 
       if (activity) {
         showActivityModal(date, activity, async (updated) => {
           const activities = [...(activitiesData?.activities || [])]
           activities[index] = { ...activities[index], ...updated }
-          await firestore.updateWeekendActivity(activitiesData.id, { activities })
+          await api.updateWeekendActivity(activitiesData.id, { activities: JSON.stringify(activities) })
           hideModal()
           showToast(t('common_success'))
           window.location.reload()
@@ -242,7 +265,7 @@ function attachActivityListeners(container) {
           // Delete
           const activities = [...(activitiesData?.activities || [])]
           activities.splice(index, 1)
-          await firestore.updateWeekendActivity(activitiesData.id, { activities })
+          await api.updateWeekendActivity(activitiesData.id, { activities: JSON.stringify(activities) })
           hideModal()
           showToast(t('common_success'))
           window.location.reload()
@@ -327,13 +350,13 @@ window.showAddModal.weekend = () => {
   const date = today === 0 ? format(addDays(startOfWeek(new Date(), { weekStartsOn: 6 }), 1), 'yyyy-MM-dd') : format(startOfWeek(new Date(), { weekStartsOn: 6 }), 'yyyy-MM-dd')
 
   showActivityModal(date, null, async (activity) => {
-    const activitiesData = await firestore.getWeekendActivityByDate(date)
+    const activitiesData = await getWeekendActivityByDate(date)
     const activities = activitiesData?.activities || []
     activities.push(activity)
     if (activitiesData) {
-      await firestore.updateWeekendActivity(activitiesData.id, { activities })
+      await api.updateWeekendActivity(activitiesData.id, { activities: JSON.stringify(activities) })
     } else {
-      await firestore.addWeekendActivity({ date, activities })
+      await api.createWeekendActivity({ date, activities: typeof activities === 'string' ? activities : JSON.stringify(activities) })
     }
     hideModal()
     showToast(t('common_success'))

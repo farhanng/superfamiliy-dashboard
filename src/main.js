@@ -11,7 +11,7 @@ import { renderMealPlan } from './screens/mealplan.js'
 import { renderWeekend } from './screens/weekend.js'
 import { renderBills } from './screens/bills.js'
 import { renderLogin } from './screens/login.js'
-import { isAuthenticated, logout } from './firebase.js'
+import { isAuthenticated, logout } from './services/api.js'
 // Screen renderers
 const screenRenderers = {
   login: renderLogin,

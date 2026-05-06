@@ -3,7 +3,7 @@
 // Migrated to Firestore
 
 import { t, getLang } from '../i18n.js'
-import * as firestore from '../services/firestore.js'
+import * as api from '../services/api.js'
 import { formatDate, showModal, hideModal, showToast } from '../main.js'
 import { format, addMonths, subMonths, startOfMonth, endOfMonth, eachDayOfInterval, isSameDay, parseISO, isToday, isBefore, startOfWeek, endOfWeek } from 'date-fns'
 import { id as idLocale, enUS } from 'date-fns/locale'
@@ -33,7 +33,7 @@ export async function renderEvents(container) {
 
   // Get events from Firestore
   const [allEvents] = await Promise.all([
-    firestore.getEvents()
+    api.getEvents()
   ])
 
   // Filter events for current month
@@ -55,7 +55,7 @@ export async function renderEvents(container) {
     eventDates[h.date].push({ ...h, title: h.name, id: -Math.abs(h.date.split('-').join('')), isHoliday: true })
   })
 
-  const upcomingEvents = (await firestore.getUpcomingEvents(90)).sort((a, b) => a.date.localeCompare(b.date))
+  const upcomingEvents = allEvents.filter(e => { const today90 = new Date(); today90.setDate(today90.getDate() + 90); const todayStr = format(new Date(), 'yyyy-MM-dd'); const futureStr = format(today90, 'yyyy-MM-dd'); return e.date && e.date >= todayStr && e.date <= futureStr; }).sort((a, b) => a.date.localeCompare(b.date))
 
   // Also get upcoming holidays for the next 90 days
   const today90 = new Date()
@@ -301,7 +301,7 @@ function showEventModal(existing = null, defaultDate = null) {
 
     if (existing) {
       try {
-        await firestore.updateEvent(existing.id, data)
+        await api.updateEvent(existing.id, data)
         hideModal()
         showToast(t('common_success'))
         window.location.reload()
@@ -311,7 +311,7 @@ function showEventModal(existing = null, defaultDate = null) {
       }
     } else {
       try {
-        await firestore.addEvent(data)
+        await api.createEvent(data)
         hideModal()
         showToast(t('common_success'))
         window.location.reload()
@@ -326,7 +326,7 @@ function showEventModal(existing = null, defaultDate = null) {
     document.getElementById('delete-btn').addEventListener('click', async () => {
       if (confirm(t('common_confirm_delete'))) {
         try {
-          await firestore.deleteEvent(existing.id)
+          await api.deleteEvent(existing.id)
           hideModal()
           showToast(t('common_success'))
           window.location.reload()
